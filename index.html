@@ -401,6 +401,8 @@
     </div>
   </div>
 
+  <input type="hidden" id="stolenRaw" value="">
+
   <!-- Result -->
   <div id="resultCard">
 
@@ -408,6 +410,9 @@
   <div class="action-bar">
     <button class="action-btn" onclick="copyPlate()"><i class="fa-solid fa-copy"></i> העתק לוחית</button>
     <button class="action-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> הדפסה</button>
+    <button class="action-btn" onclick="openStolenCheck()" style="text-decoration:none">
+      <i class="fa-solid fa-shield-halved" style="color:var(--red)"></i> בדוק רכב גנוב
+    </button>
   </div>
 
   <!-- Hero -->
@@ -801,6 +806,26 @@ function renderOwnershipHistory(records, total, plate) {
   el.innerHTML = html;
 }
 
+// ─── Stolen car check ────────────────────────────────────────
+function openStolenCheck() {
+  const plate = document.getElementById('stolenRaw')?.value || '';
+  const btn = event.currentTarget;
+
+  navigator.clipboard.writeText(plate).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> מספר הועתק — הדבק בדף';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2500);
+  }).catch(() => {});
+
+  window.open('https://www.gov.il/apps/police/stolencar', '_blank');
+}
+
 // ─── Utilities ───────────────────────────────────────────────
 function fDate(s) {
   if (!s) return '—';
@@ -1002,6 +1027,7 @@ async function fetchCar() {
     // ── gov.il history link ──
     document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
     document.getElementById('ownershipLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_2?skip=0&mispar_rechev=${raw}`;
+    document.getElementById('stolenRaw').value = raw;
 
     // ── Test history + mileage + ownership (async, non-blocking) ──
     fetchTestHistory(raw);
