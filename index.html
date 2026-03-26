@@ -555,6 +555,19 @@
       </div>
     </div>
 
+    <!-- ריקולים -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="km-section">
+        <div class="km-header">
+          <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> קריאות שירות (Recall)</div>
+          <a href="https://www.gov.il/he/departments/dynamiccollectors/recall" target="_blank" class="findcar-btn">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> מלא ב-gov.il
+          </a>
+        </div>
+        <div id="recallBody"></div>
+      </div>
+    </div>
+
     <div class="footer-note">
       <div class="footer-icon"><i class="fa-solid fa-circle-info"></i></div>
       <span>המידע נשלף בזמן אמת ממסד נתונים.gov.il — המשרד לתחבורה ובטיחות בדרכים. התמונה נשלפת לפי דגם הרכב ועשויה להיות ייצוגית בלבד.</span>
@@ -818,6 +831,145 @@ function renderOwnershipHistory(records, total, plate) {
   el.innerHTML = html;
 }
 
+// ─── Recalls ──────────────────────────────────────────────────
+const CKAN_RECALL = '2c33523f-87aa-44ec-a736-edbb0a82975e';
+
+// מיפוי עברית → אנגלית לחיפוש ריקולים
+const BRAND_HEB_ENG = {
+  'אודי':'AUDI','טויוטה':'TOYOTA','מאזדה':'MAZDA','הונדה':'HONDA',
+  'ניסאן':'NISSAN','מיצובישי':'MITSUBISHI','יונדאי':'HYUNDAI','קיה':'KIA',
+  'מרצדס':'MERCEDES','פולקסווגן':'VOLKSWAGEN','סקודה':'SKODA','סיאט':'SEAT',
+  'פיאט':'FIAT',"פז'ו":'PEUGEOT','רנו':'RENAULT','סיטרואן':'CITROEN',
+  'אופל':'OPEL','פורד':'FORD','שברולט':'CHEVROLET','סובארו':'SUBARU',
+  'סוזוקי':'SUZUKI','טסלה':'TESLA','וולוו':'VOLVO','לקסוס':'LEXUS',
+  'אינפיניטי':'INFINITI',"ג'יפ":'JEEP','פורשה':'PORSCHE','מיני':'MINI',
+  "דאצ'יה":'DACIA','ספארי':'ISUZU','איסוזו':'ISUZU','סאנגיונג':'SSANGYONG',
+  'ב מ וו':'BMW','ב.מ.וו':'BMW',
+};
+
+function extractBrandEng(tozetNm) {
+  if (!tozetNm) return null;
+  const lower = tozetNm.trim();
+  // Try multi-word first, then single word
+  for (const [heb, eng] of Object.entries(BRAND_HEB_ENG)) {
+    if (lower.includes(heb)) return eng;
+  }
+  // Try English brand directly in name (e.g. "BMW")
+  const engMatch = lower.match(/[A-Z]{2,}/);
+  return engMatch ? engMatch[0] : null;
+}
+
+function extractModelKeyword(kinuy) {
+  if (!kinuy) return null;
+  // kinuy like "Q5 SPORTBACK" → "Q5", "MAZDA CX-5" → "CX-5" or "MAZDA"
+  const parts = kinuy.trim().split(/\s+/);
+  // Return first part that looks like a model (not just brand)
+  return parts[0] || null;
+}
+
+async function fetchRecalls(tozetNm, kinuyMishari) {
+  const el = document.getElementById('recallBody');
+  if (!tozetNm && !kinuyMishari) {
+    el.innerHTML = `<div class="km-no-data">אין מידע זמין.</div>`; return;
+  }
+  el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בודק קריאות שירות...</div>`;
+
+  try {
+    const brandEng = extractBrandEng(tozetNm);
+    const modelKw  = extractModelKeyword(kinuyMishari);
+
+    // Search by brand name + model keyword via full-text q
+    const searchTerm = [brandEng, modelKw].filter(Boolean).join(' ');
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_RECALL}&q=${encodeURIComponent(searchTerm)}&limit=250`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) throw new Error('failed');
+
+    let records = d.result?.records ?? [];
+
+    // Filter: brand must match TOZAR_TEUR, model must appear in DEGEM
+    if (brandEng) records = records.filter(r =>
+      (r.TOZAR_TEUR || '').toUpperCase().includes(brandEng));
+
+    if (modelKw) {
+      const mku = modelKw.toUpperCase();
+      records = records.filter(r => {
+        // DEGEM can be "Q5", "Q5,Q5E", "R8,TT" — split by comma/space and check each token
+        const tokens = (r.DEGEM || '').toUpperCase().split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
+        return tokens.some(t => t === mku || t.startsWith(mku + ' ') || t.startsWith(mku + ','));
+      });
+    }
+
+    // Deduplicate by RECALL_ID
+    const seen = new Set();
+    records = records.filter(r => {
+      if (seen.has(r.RECALL_ID)) return false;
+      seen.add(r.RECALL_ID); return true;
+    });
+
+    // Sort by recall year descending
+    records.sort((a, b) => (b.SHNAT_RECALL || 0) - (a.SHNAT_RECALL || 0));
+
+    renderRecalls(records);
+  } catch (e) {
+    el.innerHTML = `<div class="km-no-data">לא ניתן לשלוף נתוני ריקול כרגע.</div>`;
+  }
+}
+
+function renderRecalls(records) {
+  const el = document.getElementById('recallBody');
+
+  if (!records.length) {
+    el.innerHTML = `<div class="km-no-data" style="color:var(--green)">
+      <i class="fa-solid fa-circle-check" style="font-size:1.4rem;display:block;margin-bottom:10px"></i>
+      לא נמצאו קריאות שירות לרכב זה ✓</div>`;
+    return;
+  }
+
+  const rows = records.map(r => {
+    const title    = r.SUG_RECALL   || 'קריאת שירות';
+    const problem  = r.SUG_TAKALA   || '';
+    const fix      = r.OFEN_TIKUN   || '';
+    const year     = r.SHNAT_RECALL || '';
+    const begin    = r.BUILD_BEGIN_A ? String(r.BUILD_BEGIN_A).slice(0,10) : '';
+    const end      = r.BUILD_END_A   ? String(r.BUILD_END_A).slice(0,10)   : '';
+    const phone    = r.TELEPHONE     || '';
+    const website  = r.WEBSITE       || '';
+    const recallId = r.RECALL_ID     || '';
+    const importer  = r.YUVUAN_TEUR  || '';
+    const standard  = r.TKINA_EU     || '';
+    const teurTakala = r.TEUR_TAKALA || '';
+
+    return `<div style="padding:14px 0; border-bottom:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+        <span style="font-size:0.88rem;font-weight:700;color:var(--accent);">${title}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          ${standard ? `<span style="font-size:0.7rem;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:2px 8px;color:var(--blue);">${standard}</span>` : ''}
+          <span style="font-size:0.72rem;background:rgba(232,168,37,0.1);border:1px solid rgba(232,168,37,0.25);border-radius:6px;padding:2px 8px;color:var(--accent);white-space:nowrap;">
+            ${year ? `שנת ריקול: ${year}` : `#${recallId}`}
+          </span>
+        </div>
+      </div>
+      ${importer ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;"><i class="fa-solid fa-building" style="margin-left:4px;opacity:0.7;"></i>${importer}</div>` : ''}
+      ${problem    ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;"><b style="color:var(--text-muted);">סוג תקלה:</b> ${problem}</div>` : ''}
+      ${teurTakala ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;line-height:1.5;"><b style="color:var(--text-muted);">תיאור:</b> ${teurTakala}</div>` : ''}
+      ${fix      ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;"><b style="color:var(--text-muted);">תיקון:</b> ${fix}</div>` : ''}
+      ${(begin||end) ? `<div style="font-size:0.76rem;color:var(--text-muted);">טווח ייצור: ${begin}${end ? ' — '+end : ''}</div>` : ''}
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
+        ${phone   ? `<a href="tel:${phone}" style="font-size:0.75rem;color:var(--blue);text-decoration:none;"><i class="fa-solid fa-phone"></i> ${phone}</a>` : ''}
+        ${website ? `<a href="${website.startsWith('http') ? website : 'https://'+website}" target="_blank" style="font-size:0.75rem;color:var(--blue);text-decoration:none;"><i class="fa-solid fa-globe"></i> אתר שירות</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;display:flex;align-items:center;gap:10px;">
+      <i class="fa-solid fa-triangle-exclamation" style="color:var(--red);font-size:1.1rem;flex-shrink:0;"></i>
+      <span style="font-size:0.85rem;font-weight:700;color:var(--red);">נמצאו ${records.length} קריאות שירות לדגם זה</span>
+    </div>
+    <div>${rows}</div>`;
+}
+
 // ─── Off-road check ───────────────────────────────────────────
 async function fetchOffRoad(plate, standalone = false) {
   const banner = document.getElementById('offRoadBanner');
@@ -1070,10 +1222,11 @@ async function fetchCar() {
     document.getElementById('ownershipLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_2?skip=0&mispar_rechev=${raw}`;
     document.getElementById('stolenRaw').value = raw;
 
-    // ── Test history + mileage + ownership + off-road (async, non-blocking) ──
+    // ── Test history + mileage + ownership + off-road + recalls (async, non-blocking) ──
     fetchTestHistory(raw);
     fetchOwnershipHistory(raw);
     fetchOffRoad(raw);
+    fetchRecalls(c.tozeret_nm, c.kinuy_mishari);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
