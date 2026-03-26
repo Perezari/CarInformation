@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מאגר רכבים ישראל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181b22;
+    --border: rgba(255,255,255,0.07);
+    --border-active: rgba(255,255,255,0.15);
+    --accent: #e8a825;
+    --accent2: #f0c040;
+    --text: #f0f2f5;
+    --text-muted: #6b7280;
+    --text-dim: #9ca3af;
+    --red: #ef4444;
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Heebo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Background ── */
+  .bg-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .bg-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 60% 40% at 50% -10%, rgba(232,168,37,0.12) 0%, transparent 70%);
+  }
+
+  /* ── Layout ── */
+  .page { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  /* ── Header ── */
+  .header { text-align: center; margin-bottom: 48px; }
+  .header-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(232,168,37,0.1); border: 1px solid rgba(232,168,37,0.25);
+    border-radius: 100px; padding: 6px 16px; font-size: 12px; color: var(--accent);
+    font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 900;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; margin-bottom: 12px;
+  }
+  .header p { color: var(--text-muted); font-size: 1rem; font-weight: 400; }
+
+  /* ── Search ── */
+  .search-wrap { max-width: 580px; margin: 0 auto 48px; }
+  .search-box {
+    position: relative;
+    background: var(--surface); border: 1.5px solid var(--border-active);
+    border-radius: 18px;
+    transition: border-color 0.25s, box-shadow 0.25s;
+  }
+  .search-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(232,168,37,0.12), 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .search-input {
+    width: 100%; background: none; border: none; outline: none;
+    padding: 20px 54px 20px 140px;
+    font-size: 1.1rem; color: var(--text);
+    font-family: 'Heebo', sans-serif; direction: rtl;
+    border-radius: 18px; letter-spacing: 0.03em;
+  }
+  .search-input::placeholder { color: var(--text-muted); }
+  /* magnifier icon on the RIGHT (RTL start) */
+  .search-icon {
+    position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 15px; pointer-events: none;
+  }
+  /* button floats on the LEFT (RTL end) */
+  .search-btn {
+    position: absolute; top: 6px; left: 6px; bottom: 6px;
+    background: var(--accent); color: #000; font-family: 'Heebo', sans-serif;
+    font-size: 0.9rem; font-weight: 800; border: none; cursor: pointer;
+    padding: 0 22px; border-radius: 12px;
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .search-btn:hover { background: var(--accent2); }
+  .search-btn:active { transform: scale(0.97); }
+
+  .search-status { text-align: center; margin-top: 14px; font-size: 0.9rem; min-height: 24px; }
+  .status-loading { color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .status-error { color: var(--red); }
+  .spin { animation: spin 0.8s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Result Card ── */
+  #resultCard { display: none; animation: slideUp 0.5s cubic-bezier(0.16,1,0.3,1); }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Hero Panel ── */
+  .hero-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px; overflow: hidden;
+    margin-bottom: 24px;
+    display: grid; grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 700px) { .hero-panel { grid-template-columns: 1fr; } }
+
+  .car-image-wrap {
+    position: relative; height: 100%; min-height: 320px; background: #0d0f14;
+    overflow: hidden;
+  }
+  .car-image-wrap img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: opacity 0.6s ease, transform 0.8s ease;
+    transform: scale(1.04);
+  }
+  .car-image-wrap img.loaded { transform: scale(1); }
+  .image-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(0,0,0,0.15) 0%, transparent 60%),
+                linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.5) 100%);
+  }
+  /* ── Plate Inline (next to model name) ── */
+  .plate-il {
+    display: flex; align-items: stretch;
+    border-radius: 10px; overflow: hidden;
+    border: 2.5px solid #1a1a2e;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+    font-weight: 900;
+  }
+  .plate-il-flag {
+    background: #003399; color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 6px 9px; gap: 2px; min-width: 36px;
+  }
+  .plate-il-flag .flag-emoji { font-size: 14px; }
+  .plate-il-flag .flag-text { font-size: 9px; font-weight: 800; letter-spacing: 0.05em; }
+  .plate-il-number {
+    background: #f5c518; color: #111;
+    display: flex; align-items: center;
+    padding: 8px 20px;
+    font-size: 1.6rem; letter-spacing: 3px; font-weight: 900;
+    font-family: 'Heebo', sans-serif;
+  }
+  .image-shimmer {
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, #111 0%, #1a1d24 50%, #111 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ── Car Info ── */
+  .car-info { padding: 28px 28px 28px 28px; display: flex; flex-direction: column; justify-content: center; gap: 0; }
+  .car-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .brand-logo { width: 40px; height: 40px; object-fit: contain; filter: brightness(0) invert(1); opacity: 0.85; }
+  .car-make { font-size: 0.75rem; color: var(--accent); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+
+  /* Model + plate on same row */
+  .car-model-row {
+    display: flex; align-items: center;
+    justify-content: space-between; gap: 12px;
+    margin-bottom: 4px;
+  }
+  .car-model-name { font-size: 1.7rem; font-weight: 900; line-height: 1.1; color: var(--text); }
+  .car-trim { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; }
+
+  /* Plate inline */
+  .plate-il {
+    display: flex; align-items: stretch; flex-shrink: 0;
+    border-radius: 8px; overflow: hidden;
+    border: 2px solid rgba(0,0,0,0.6);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+    font-weight: 900;
+  }
+  .plate-il-flag {
+    background: #003399; color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 5px 7px; gap: 1px; min-width: 28px;
+  }
+  .plate-il-flag .flag-emoji { font-size: 12px; }
+  .plate-il-flag .flag-text { font-size: 8px; font-weight: 800; letter-spacing: 0.04em; }
+  .plate-il-number {
+    background: #f5c518; color: #111;
+    display: flex; align-items: center;
+    padding: 6px 14px;
+    font-size: 1.2rem; letter-spacing: 2.5px; font-weight: 900;
+    font-family: 'Heebo', sans-serif;
+  }
+
+  .quick-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-chip {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .stat-chip .label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+  .stat-chip .value { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+
+  .stat-chip.accent { border-color: rgba(232,168,37,0.3); background: rgba(232,168,37,0.06); }
+  .stat-chip.accent .value { color: var(--accent); }
+  .stat-chip.green { border-color: rgba(34,197,94,0.25); background: rgba(34,197,94,0.06); }
+  .stat-chip.green .value { color: var(--green); }
+  .stat-chip.red { border-color: rgba(239,68,68,0.25); background: rgba(239,68,68,0.06); }
+  .stat-chip.red .value { color: var(--red); }
+
+  /* ── Data Sections ── */
+  .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .sections-grid { grid-template-columns: 1fr; } }
+
+  .data-section {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 24px;
+  }
+  .data-section.full { grid-column: 1 / -1; }
+
+  .section-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+    margin-bottom: 20px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title i { color: var(--accent); font-size: 14px; }
+
+  .data-row { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .data-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .data-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
+  .data-value { font-size: 0.9rem; color: var(--text); font-weight: 600; text-align: left; max-width: 55%; }
+
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 100px;
+    font-size: 0.75rem; font-weight: 700;
+  }
+  .tag-yellow { background: rgba(232,168,37,0.15); color: var(--accent); border: 1px solid rgba(232,168,37,0.3); }
+  .tag-green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+  .tag-red    { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+  .tag-blue   { background: rgba(59,130,246,0.12); color: var(--blue);   border: 1px solid rgba(59,130,246,0.25); }
+
+  .footer-note {
+    display: flex; align-items: center; gap: 14px;
+    color: var(--text-muted); font-size: 0.8rem; margin-top: 28px;
+    padding: 18px 24px;
+    background: var(--surface);
+    border-radius: 16px; border: 1px solid var(--border);
+    line-height: 1.6;
+  }
+  .footer-icon {
+    width: 34px; height: 34px; flex-shrink: 0;
+    background: rgba(232,168,37,0.1); border: 1px solid rgba(232,168,37,0.2);
+    border-radius: 9px; display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 14px;
+  }
+
+  /* ── Mileage history section ── */
+  .km-section {
+    grid-column: 1 / -1;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 24px;
+  }
+  .km-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .km-title { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .km-title i { color: var(--accent); font-size: 14px; }
+  .findcar-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 10px; padding: 8px 16px;
+    font-size: 0.8rem; font-weight: 700; color: #60a5fa;
+    cursor: pointer; font-family: 'Heebo', sans-serif;
+    text-decoration: none; transition: all 0.15s;
+  }
+  .findcar-btn:hover { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); }
+  .km-loading { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 20px 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .km-table { width: 100%; border-collapse: collapse; }
+  .km-table th {
+    font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 0 12px 10px; text-align: right; border-bottom: 1px solid var(--border);
+  }
+  .km-table td { padding: 11px 12px; font-size: 0.88rem; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); }
+  .km-table tr:last-child td { border-bottom: none; }
+  .km-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .km-number { color: var(--accent); font-weight: 800; font-size: 0.95rem; direction: ltr; text-align: left; }
+  .km-result-ok  { display:inline-flex; align-items:center; gap:4px; color: var(--green); font-size:0.78rem; font-weight:700; }
+  .km-result-fail{ display:inline-flex; align-items:center; gap:4px; color: var(--red);   font-size:0.78rem; font-weight:700; }
+  .km-no-data { text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.85rem; }
+  .km-latest-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(232,168,37,0.1); border: 1px solid rgba(232,168,37,0.25);
+    border-radius: 8px; padding: 4px 10px; font-size: 0.72rem; font-weight: 700; color: var(--accent);
+    margin-right: 8px;
+  }
+  .recent-wrap {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    justify-content: center; margin-top: 12px; min-height: 28px;
+  }
+  .recent-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+  .recent-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 100px; padding: 4px 12px; font-size: 0.78rem;
+    color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+    font-family: 'Heebo', sans-serif;
+  }
+  .recent-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .recent-chip .rm {
+    opacity: 0.5; font-size: 10px; margin-right: 2px;
+    cursor: pointer; padding: 1px 3px;
+  }
+  .recent-chip .rm:hover { opacity: 1; color: var(--red); }
+
+  /* ── Days countdown badge ── */
+  .countdown-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.72rem; font-weight: 700; padding: 3px 10px;
+    border-radius: 100px; margin-top: 4px;
+  }
+  .countdown-ok   { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+  .countdown-warn { background: rgba(232,168,37,0.12); color: var(--accent); border: 1px solid rgba(232,168,37,0.3); }
+  .countdown-exp  { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+
+  /* ── Action bar ── */
+  .action-bar {
+    display: flex; gap: 10px; justify-content: flex-end;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .action-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 16px;
+    font-size: 0.82rem; font-weight: 600; color: var(--text-dim);
+    cursor: pointer; font-family: 'Heebo', sans-serif;
+    transition: all 0.15s;
+  }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(232,168,37,0.06); }
+  .action-btn i { font-size: 13px; }
+
+  /* ── Print ── */
+  @media print {
+    .bg-grid, .bg-glow, .header, .search-wrap, .action-bar, .footer-note { display: none !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .hero-panel, .data-section { border: 1px solid #ddd !important; background: #fff !important; break-inside: avoid; }
+    .car-info, .data-value, .data-label, .stat-chip .value, .stat-chip .label { color: #000 !important; }
+    :root { --text:#000; --text-muted:#555; --surface:#fff; --surface2:#f5f5f5; --border:#ddd; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<div class="page">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-badge">
+      <i class="fa-solid fa-shield-halved"></i>
+      מאגר הרכבים הלאומי
+    </div>
+    <h1>בדיקת פרטי רכב</h1>
+    <p>מידע מלא ממאגרי נתונים.gov.il — הזן מספר רישוי לחיפוש מיידי</p>
+  </div>
+
+  <!-- Search -->
+  <div class="search-wrap">
+    <div class="search-box">
+      <span class="search-icon" style="padding-right: 18px;"><i class="fa-solid fa-magnifying-glass"></i></span>
+      <input type="text" id="plateInput" class="search-input" placeholder="מספר רישוי (לדוגמה: 1234567)"
+             onkeypress="if(event.key==='Enter') fetchCar()">
+      <button class="search-btn" onclick="fetchCar()"><i class="fa-solid fa-car"></i>&nbsp; חפש</button>
+    </div>
+    <div class="search-status">
+      <div id="statusMsg"></div>
+    </div>
+    <div class="recent-wrap" id="recentWrap" style="display:none">
+      <span class="recent-label">חיפושים אחרונים:</span>
+      <div id="recentChips"></div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="resultCard">
+
+    <!-- Action bar -->
+  <div class="action-bar">
+    <button class="action-btn" onclick="copyPlate()"><i class="fa-solid fa-copy"></i> העתק לוחית</button>
+    <button class="action-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> הדפסה</button>
+  </div>
+
+  <!-- Hero -->
+    <div class="hero-panel">
+      <div class="car-image-wrap" id="imgWrap">
+        <div class="image-shimmer" id="shimmer"></div>
+        <img id="carImg" src="" alt="car" style="opacity:0">
+        <div class="image-overlay"></div>
+      </div>
+
+      <div class="car-info">
+        <div>
+          <div class="car-brand-row">
+            <img id="brandLogo" src="" alt="" style="display:none" class="brand-logo" onerror="this.style.display='none'">
+            <span class="car-make" id="carMake">—</span>
+          </div>
+
+          <!-- Model name + plate inline -->
+          <div class="car-model-row">
+            <div class="car-model-name" id="carModel">—</div>
+            <div class="plate-il">
+              <div class="plate-il-flag">
+                <span class="flag-emoji">🇮🇱</span>
+                <span class="flag-text">IL</span>
+              </div>
+              <div class="plate-il-number" id="plateTxt">—</div>
+            </div>
+          </div>
+
+          <div class="car-trim" id="carTrim">—</div>
+          <div class="quick-stats">
+            <div class="stat-chip accent">
+              <div class="label">שנת ייצור</div>
+              <div class="value" id="qYear">—</div>
+            </div>
+            <div class="stat-chip" id="chipFuel">
+              <div class="label">סוג דלק</div>
+              <div class="value" id="qFuel">—</div>
+            </div>
+            <div class="stat-chip" id="chipTest">
+              <div class="label">תוקף רישיון</div>
+              <div class="value" id="qLicense">—</div>
+            </div>
+            <div class="stat-chip">
+              <div class="label">צבע</div>
+              <div class="value" id="qColor">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sections Grid -->
+    <div class="sections-grid">
+
+      <!-- פרטי רכב -->
+      <div class="data-section">
+        <div class="section-title"><i class="fa-solid fa-car"></i> פרטי הרכב</div>
+        <div class="data-row"><span class="data-label">שם תוצר</span><span class="data-value" id="dMake">—</span></div>
+        <div class="data-row"><span class="data-label">שם דגם</span><span class="data-value" id="dModel">—</span></div>
+        <div class="data-row"><span class="data-label">כינוי מסחרי</span><span class="data-value" id="dKinuy">—</span></div>
+        <div class="data-row"><span class="data-label">רמת גימור</span><span class="data-value" id="dTrim">—</span></div>
+        <div class="data-row"><span class="data-label">קוד תוצר</span><span class="data-value" id="dMakeCd">—</span></div>
+        <div class="data-row"><span class="data-label">קוד דגם</span><span class="data-value" id="dModelCd">—</span></div>
+        <div class="data-row"><span class="data-label">סוג דגם</span><span class="data-value" id="dSugDegem">—</span></div>
+      </div>
+
+      <!-- פרטים טכניים -->
+      <div class="data-section">
+        <div class="section-title"><i class="fa-solid fa-gears"></i> פרטים טכניים</div>
+        <div class="data-row"><span class="data-label">דגם מנוע</span><span class="data-value" id="dEngine">—</span></div>
+        <div class="data-row"><span class="data-label">סוג דלק</span><span class="data-value" id="dFuel">—</span></div>
+        <div class="data-row"><span class="data-label">צמיג קדמי</span><span class="data-value" id="dTireF">—</span></div>
+        <div class="data-row"><span class="data-label">צמיג אחורי</span><span class="data-value" id="dTireR">—</span></div>
+        <div class="data-row"><span class="data-label">קבוצת זיהום</span><span class="data-value" id="dPollution">—</span></div>
+        <div class="data-row"><span class="data-label">רמת איבזור בטיחות</span><span class="data-value" id="dSafety">—</span></div>
+      </div>
+
+      <!-- בעלות ורישום -->
+      <div class="data-section">
+        <div class="section-title"><i class="fa-solid fa-file-contract"></i> בעלות ורישום</div>
+        <div class="data-row"><span class="data-label">סוג בעלות</span><span class="data-value" id="dOwner">—</span></div>
+        <div class="data-row"><span class="data-label">מספר שילדה</span><span class="data-value" id="dChassis">—</span></div>
+        <div class="data-row"><span class="data-label">הוראת רישום</span><span class="data-value" id="dRegOrder">—</span></div>
+        <div class="data-row"><span class="data-label">מועד עלייה לכביש</span><span class="data-value" id="dFirstReg">—</span></div>
+        <div class="data-row"><span class="data-label">צבע (קוד)</span><span class="data-value" id="dColorCd">—</span></div>
+        <div class="data-row"><span class="data-label">צבע רכב</span><span class="data-value" id="dColor">—</span></div>
+      </div>
+
+      <!-- תאריכים -->
+      <div class="data-section">
+        <div class="section-title"><i class="fa-solid fa-calendar-check"></i> תאריכים ותוקף</div>
+        <div class="data-row"><span class="data-label">שנת ייצור</span><span class="data-value" id="dYear">—</span></div>
+        <div class="data-row"><span class="data-label">תאריך מבחן אחרון</span><span class="data-value" id="dLastTest">—</span></div>
+        <div class="data-row">
+          <span class="data-label">תוקף רישיון רכב</span>
+          <span class="data-value" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+            <span id="dLicense">—</span>
+            <span id="dCountdown"></span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- קילומטרז' והיסטוריית טסטים -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="km-section">
+        <div class="km-header">
+          <div class="km-title"><i class="fa-solid fa-gauge-high"></i> קילומטרז' והיסטוריית טסטים</div>
+          <a id="findcarLink" href="#" target="_blank" class="findcar-btn">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> היסטוריה מלאה ב-gov.il
+          </a>
+        </div>
+        <div id="kmBody"><div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף היסטוריית טסטים...</div></div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <div class="footer-icon"><i class="fa-solid fa-circle-info"></i></div>
+      <span>המידע נשלף בזמן אמת ממסד נתונים.gov.il — המשרד לתחבורה ובטיחות בדרכים. התמונה נשלפת לפי דגם הרכב ועשויה להיות ייצוגית בלבד.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Recent searches (sessionStorage) ───────────────────────
+const HISTORY_KEY = 'car_search_history';
+function getHistory() {
+  try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+}
+function addToHistory(plate, label) {
+  let h = getHistory().filter(x => x.plate !== plate);
+  h.unshift({ plate, label });
+  if (h.length > 5) h = h.slice(0,5);
+  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  renderHistory();
+}
+function removeFromHistory(plate) {
+  const h = getHistory().filter(x => x.plate !== plate);
+  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  renderHistory();
+}
+function renderHistory() {
+  const h = getHistory();
+  const wrap = document.getElementById('recentWrap');
+  const chips = document.getElementById('recentChips');
+  if (!h.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  chips.innerHTML = h.map(x => `
+    <span class="recent-chip" onclick="loadFromHistory('${x.plate}')">
+      <i class="fa-solid fa-clock-rotate-left" style="font-size:10px"></i>
+      ${x.label}
+      <span class="rm" onclick="event.stopPropagation();removeFromHistory('${x.plate}')">✕</span>
+    </span>`).join('');
+}
+function loadFromHistory(plate) {
+  document.getElementById('plateInput').value = plate;
+  fetchCar();
+}
+
+// ─── Days countdown ───────────────────────────────────────────
+function renderCountdown(dateStr) {
+  const el = document.getElementById('dCountdown');
+  if (!dateStr || !el) return;
+  const d = new Date(dateStr), now = new Date();
+  const diff = Math.round((d - now) / (1000*60*60*24));
+  let cls, txt;
+  if (diff < 0)       { cls='countdown-exp';  txt=`פג לפני ${Math.abs(diff)} ימים ⚠️`; }
+  else if (diff < 60) { cls='countdown-warn'; txt=`${diff} ימים נותרו ⚠️`; }
+  else                { cls='countdown-ok';   txt=`${diff} ימים נותרו ✓`; }
+  el.innerHTML = `<span class="countdown-badge ${cls}">${txt}</span>`;
+}
+
+// ─── Copy plate ───────────────────────────────────────────────
+function copyPlate() {
+  const txt = document.getElementById('plateTxt').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = event.currentTarget;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> הועתק!';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.color=''; btn.style.borderColor=''; }, 1800);
+  });
+}
+
+// ─── Vehicle History + Mileage ───────────────────────────────
+// Real response structure (from Network tab):
+// { Results: [{ Data: { mispar_manoa, kilometer_test_aharon, shinui_mivne_ind,
+//   gapam_ind, shnui_zeva_ind, shinui_zmig_ind, rishum_rishon_dt,
+//   mkoriut_nm, mispar_rechev }, Description, UrlName }], TotalResults }
+
+const DG_ENDPOINT  = 'https://www.gov.il/he/api/DataGovProxy/GetDGResults';
+const DG_TEMPLATE  = '76a0abf9-d45a-4040-924b-e2f5cefe2ae4';
+const LOCAL_PROXY  = '/gov-proxy';   // served by server.py
+
+async function fetchTestHistory(plate) {
+  const kmBody = document.getElementById('kmBody');
+  kmBody.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נסועה ומידע היסטורי...</div>`;
+
+  const payload = JSON.stringify({
+    DynamicTemplateID: DG_TEMPLATE,
+    From: 0,
+    QueryFilters: {
+      mispar_rechev: { Query: plate },
+      skip:          { Query: 0 }
+    }
+  });
+
+  // Try local proxy first (server.py), then fall back to direct (for hosted deployments)
+  const endpoints = [LOCAL_PROXY, DG_ENDPOINT];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+      if (!res.ok) continue;
+      const d = await res.json();
+
+      // Real structure: { Results: [{ Data: {...} }] }
+      const raw = d?.Results?.[0]?.Data ?? d?.results?.[0]?.Data ??
+                  d?.Results?.[0]       ?? d?.results?.[0]       ??
+                  d?.Data               ?? (Array.isArray(d) ? d[0] : null);
+
+      if (!raw) continue;
+      renderVehicleHistory([raw], plate);
+      return;
+    } catch (_) { continue; }
+  }
+
+  kmBody.innerHTML = `
+    <div class="km-no-data">
+      <i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>
+      לא ניתן לשלוף נתוני נסועה כרגע.<br>
+      <span style="font-size:0.8rem;margin-top:6px;display:block;color:var(--text-muted)">
+        הפעל <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px">python server.py</code>
+        ואז פתח <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px">http://localhost:8080/car-lookup.html</code>
+      </span>
+    </div>`;
+}
+
+function renderVehicleHistory(records, plate) {
+  const kmBody = document.getElementById('kmBody');
+  const r = records[0];
+
+  // Real field names from gov.il response:
+  // kilometer_test_aharon, mispar_manoa, rishum_rishon_dt, mkoriut_nm,
+  // shnui_zeva_ind, shinui_zmig_ind, shinui_mivne_ind, gapam_ind
+  const mileage     = r.kilometer_test_aharon ?? r.nsoah ?? r.km ?? null;
+  const engine      = r.mispar_manoa ?? null;
+  const regDate     = r.rishum_rishon_dt ?? r.tariph_rischum ?? null;
+  const ownership   = r.mkoriut_nm ?? r.mekoriyut ?? null;
+  const colorChange = r.shnui_zeva_ind  ?? r.shinuy_tzeva ?? null;
+  const tireChange  = r.shinui_zmig_ind ?? r.shinuy_bemidot_tzmig ?? null;
+  const structChange= r.shinui_mivne_ind ?? r.shinuy_mivne ?? null;
+  const lpgAdded    = r.gapam_ind ?? r.hutaf_gpm ?? null;
+
+  // Format helpers
+  const fNum  = v => (v !== null && v !== undefined) ? Number(v).toLocaleString('he-IL') : '—';
+  const fBool = v => v == null ? '—' : (Number(v) === 1
+    ? `<span class="km-result-fail"><i class="fa-solid fa-circle-xmark"></i> כן</span>`
+    : `<span class="km-result-ok"><i class="fa-solid fa-circle-check"></i> לא</span>`);
+
+  // ── Big mileage hero ──
+  const heroMileage = mileage && Number(mileage) > 0
+    ? `<div style="display:flex; align-items:baseline; gap:8px; margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--border);">
+         <span style="font-size:0.72rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; align-self:center; flex-shrink:0;">נסועה בטסט אחרון</span>
+         <span style="font-size:2.2rem; font-weight:900; color:var(--accent); direction:ltr; margin-right:auto;">${Number(mileage).toLocaleString('he-IL')}</span>
+         <span style="font-size:0.9rem; color:var(--text-muted); font-weight:600;">ק"מ</span>
+       </div>`
+    : '';
+
+  // ── Details grid ──
+  const rows = [
+    engine      !== null ? ['מספר מנוע',          `<span style="direction:ltr; display:inline-block; font-family:monospace; font-size:0.85rem;">${engine}</span>`] : null,
+    regDate     !== null ? ['תאריך רישום',          fDate(regDate)] : null,
+    ownership   !== null ? ['מקוריות / בעלות',      ownership] : null,
+    colorChange !== null ? ['שינוי צבע',            fBool(colorChange)] : null,
+    tireChange  !== null ? ['שינוי מידות צמיג',     fBool(tireChange)] : null,
+    structChange!== null ? ['שינוי מבנה',           fBool(structChange)] : null,
+    lpgAdded    !== null ? ['הוסף גפ"מ',            fBool(lpgAdded)] : null,
+  ].filter(Boolean);
+
+  const detailRows = rows.map(([label, val]) => `
+    <div class="data-row">
+      <span class="data-label">${label}</span>
+      <span class="data-value">${val}</span>
+    </div>`).join('');
+
+  kmBody.innerHTML = heroMileage + (rows.length
+    ? `<div style="margin-top:4px;">${detailRows}</div>`
+    : '<div class="km-no-data" style="padding:8px 0;">לא נמצאו פרטים נוספים</div>');
+
+  // Debug: show raw keys if nothing mapped
+  if (!mileage && !engine && rows.length === 0) {
+    const rawKeys = Object.keys(r).slice(0, 12).map(k => `${k}: ${r[k]}`).join('<br>');
+    kmBody.innerHTML += `<details style="margin-top:12px; font-size:0.75rem; color:var(--text-muted)">
+      <summary>שדות גולמיים (debug)</summary>
+      <div style="margin-top:8px; line-height:1.8; direction:ltr;">${rawKeys}</div>
+    </details>`;
+  }
+}
+
+// ─── Utilities ───────────────────────────────────────────────
+function fDate(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+function fPlate(p) {
+  p = String(p).replace(/\D/g,'');
+  if (p.length === 7) return p.replace(/(\d{2})(\d{3})(\d{2})/,'$1-$2-$3');
+  if (p.length === 8) return p.replace(/(\d{3})(\d{2})(\d{3})/,'$1-$2-$3');
+  return p;
+}
+function set(id, v, fallback='—') {
+  const el = document.getElementById(id);
+  if (el) el.textContent = v || fallback;
+}
+function setHtml(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = v;
+}
+function statusMsg(html) { document.getElementById('statusMsg').innerHTML = html; }
+
+// ─── License expiry color ─────────────────────────────────────
+function licenseChip(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr), now = new Date();
+  const diff = (d - now) / (1000 * 60 * 60 * 24);
+  if (diff < 0) return 'red';
+  if (diff < 60) return 'red';
+  if (diff < 180) return 'accent';
+  return 'green';
+}
+
+// ─── Car image from Wikipedia ─────────────────────────────────
+// kinuyEn = e.g. "MAZDA CX-5"  →  try "Mazda CX-5", "Mazda CX5", "Mazda" etc.
+async function loadCarImage(kinuyEn) {
+  const shimmer = document.getElementById('shimmer');
+  const img = document.getElementById('carImg');
+
+  // Normalize to Title Case
+  const titleCase = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+  // Build progressive candidates – English only, no Hebrew
+  const parts = kinuyEn.trim().split(/\s+/);          // ["MAZDA","CX-5"]
+  const brand  = titleCase(parts[0]);                   // "Mazda"
+  const rest   = parts.slice(1).join(' ');              // "CX-5"
+  const restNoHyphen = rest.replace(/-/g, '');         // "CX5"
+
+  const candidates = [
+    rest   ? `${brand} ${rest}`       : null,           // "Mazda CX-5"
+    rest   ? `${brand} ${restNoHyphen}` : null,         // "Mazda CX5"
+    rest   ? `${brand}_${rest.replace(/\s/g,'_')}` : null, // "Mazda_CX-5"
+    brand,                                               // "Mazda"
+    rest   ? `${brand} ${rest} car`   : null,
+  ].filter(Boolean);
+
+  for (const term of candidates) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.thumbnail?.source) {
+        const src = data.thumbnail.source.replace(/\/\d+px-/, '/600px-');
+        img.src = src;
+        img.onload = () => {
+          shimmer.style.display = 'none';
+          img.style.opacity = '1';
+          img.classList.add('loaded');
+        };
+        img.onerror = () => loadFallbackImage(brand);
+        return;
+      }
+    } catch (_) {}
+  }
+  loadFallbackImage(brand);
+}
+
+function loadFallbackImage(brand) {
+  const img = document.getElementById('carImg');
+  const shimmer = document.getElementById('shimmer');
+  const kw = encodeURIComponent((brand || 'car') + ' car');
+  // Unsplash source API
+  img.src = `https://source.unsplash.com/800x500/?${kw}`;
+  img.onload = () => {
+    shimmer.style.display = 'none';
+    img.style.opacity = '1';
+    img.classList.add('loaded');
+  };
+  img.onerror = () => {
+    shimmer.style.display = 'none';
+    img.src = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800';
+    img.style.opacity = '1';
+    img.classList.add('loaded');
+  };
+}
+
+// ─── Brand logo ───────────────────────────────────────────────
+const BRAND_MAP = {
+  hyundai:'hyundai', toyota:'toyota', kia:'kia', honda:'honda',
+  mazda:'mazda', nissan:'nissan', mitsubishi:'mitsubishi',
+  volkswagen:'volkswagen', skoda:'skoda', seat:'seat', audi:'audi',
+  bmw:'bmw', mercedes:'mercedes-benz', ford:'ford', opel:'opel',
+  peugeot:'peugeot', renault:'renault', citroen:'citroen', fiat:'fiat',
+  subaru:'subaru', suzuki:'suzuki', tesla:'tesla', volvo:'volvo',
+  jeep:'jeep', dodge:'dodge', chevrolet:'chevrolet', lexus:'lexus',
+  infiniti:'infiniti', dacia:'dacia', seat:'seat', cupra:'cupra',
+};
+function loadBrandLogo(fullName) {
+  const logo = document.getElementById('brandLogo');
+  logo.style.display = 'none';
+  const key = Object.keys(BRAND_MAP).find(k => fullName.toLowerCase().includes(k));
+  if (!key) return;
+  logo.src = `https://cdn.jsdelivr.net/gh/filippofilip95/car-logos-dataset/logos/thumb/${BRAND_MAP[key]}.png`;
+  logo.onload = () => { logo.style.display = 'block'; };
+}
+
+// ─── Main fetch ───────────────────────────────────────────────
+async function fetchCar() {
+  const raw = document.getElementById('plateInput').value.trim().replace(/-/g,'');
+  if (!raw) return;
+
+  statusMsg('<div class="status-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נתונים...</div>');
+  document.getElementById('resultCard').style.display = 'none';
+
+  // Reset image
+  const img = document.getElementById('carImg');
+  img.style.opacity = '0';
+  img.src = '';
+  document.getElementById('shimmer').style.display = 'block';
+
+  try {
+    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${raw}`;
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+
+    if (!data.success || !data.result.records.length) throw new Error('not found');
+
+    const c = data.result.records[0];
+
+    // Build names
+    const makeHeb = c.tozeret_nm || '';
+    const modelHeb = c.kinuy_mishari || c.degem_nm || '';
+    const engMatch = (makeHeb + ' ' + modelHeb).match(/[a-zA-Z]+(?:\s+[a-zA-Z0-9]+)*/);
+    const engName = engMatch ? engMatch[0] : makeHeb;
+
+    // ── Hero Panel ──
+    set('plateTxt', fPlate(c.mispar_rechev));
+    set('carMake', makeHeb);
+    set('carModel', modelHeb || makeHeb);
+    set('carTrim', c.ramat_gimur || '');
+    set('qYear', c.shnat_yitzur);
+    set('qFuel', c.sug_delek_nm);
+    set('qColor', c.tzeva_rechev);
+
+    // License validity color
+    const lc = licenseChip(c.tokef_dt);
+    const chip = document.getElementById('chipTest');
+    chip.className = 'stat-chip ' + (lc || '');
+    set('qLicense', fDate(c.tokef_dt));
+
+    // ── Data sections ──
+    set('dMake', c.tozeret_nm);
+    set('dModel', c.degem_nm);
+    set('dKinuy', c.kinuy_mishari);
+    set('dTrim', c.ramat_gimur);
+    set('dMakeCd', c.tozeret_cd);
+    set('dModelCd', c.degem_cd);
+    set('dSugDegem', c.sug_degem);
+    set('dEngine', c.degem_manoa);
+    set('dFuel', c.sug_delek_nm);
+    set('dTireF', c.zmig_kidmi);
+    set('dTireR', c.zmig_ahori);
+    set('dPollution', c.kvutzat_zihum);
+    set('dSafety', c.ramat_eivzur_betihuty);
+    set('dOwner', c.baalut);
+    set('dChassis', c.misgeret);
+    set('dRegOrder', c.horaat_rishum);
+    set('dFirstReg', fDate(c.moed_aliya_lakvish));
+    set('dColorCd', c.tzeva_cd);
+    set('dColor', c.tzeva_rechev);
+    set('dYear', c.shnat_yitzur);
+    set('dLastTest', fDate(c.mivchan_acharon_dt));
+    set('dLicense', fDate(c.tokef_dt));
+    renderCountdown(c.tokef_dt);
+
+    // ── Image & logo ──
+    // kinuy_mishari is always English (e.g. "MAZDA CX-5") – use it directly for Wikipedia
+    const kinuyEn = (c.kinuy_mishari || '').trim();
+    const searchTerm = kinuyEn || (makeHeb.match(/[a-zA-Z]+(?:\s+[a-zA-Z0-9-]+)*/)?.[0] || 'car');
+    loadBrandLogo(kinuyEn || makeHeb);
+    loadCarImage(searchTerm);
+
+    // ── History ──
+    const label = fPlate(raw) + (kinuyEn ? ` · ${kinuyEn}` : '');
+    addToHistory(raw, label);
+
+    // ── gov.il history link ──
+    document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
+
+    // ── Test history + mileage (async, non-blocking) ──
+    fetchTestHistory(raw);
+
+    statusMsg('');
+    document.getElementById('resultCard').style.display = 'block';
+
+  } catch (e) {
+    statusMsg('<span class="status-error"><i class="fa-solid fa-triangle-exclamation"></i> לא נמצאו נתונים למספר רישוי זה</span>');
+  }
+}
+
+// Init
+renderHistory();
+</script>
+</body>
+</html>
