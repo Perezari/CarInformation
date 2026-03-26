@@ -637,9 +637,33 @@ const LOCAL_PROXY  = '/gov-proxy';
 const CORS_PROXY   = 'https://corsproxy.io/?';
 
 const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-function govEndpoint() {
-  if (IS_LOCAL) return LOCAL_PROXY;
-  return CORS_PROXY + encodeURIComponent(DG_ENDPOINT);
+
+const CORS_PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+async function govFetch(payload) {
+  if (IS_LOCAL) {
+    const res = await fetch(LOCAL_PROXY, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+  for (const proxyFn of CORS_PROXIES) {
+    try {
+      const res = await fetch(proxyFn(DG_ENDPOINT), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!res.ok) continue;
+      const d = await res.json();
+      if (d?.Results || d?.results || d?.TotalResults !== undefined) return d;
+    } catch (_) { continue; }
+  }
+  throw new Error('all proxies failed');
 }
 
 async function fetchTestHistory(plate) {
@@ -656,18 +680,10 @@ async function fetchTestHistory(plate) {
   });
 
   try {
-    const res = await fetch(govEndpoint(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const d = await res.json();
-
+    const d = await govFetch(payload);
     const raw = d?.Results?.[0]?.Data ?? d?.results?.[0]?.Data ??
                 d?.Results?.[0]       ?? d?.results?.[0]       ??
                 d?.Data               ?? (Array.isArray(d) ? d[0] : null);
-
     if (!raw) throw new Error('no data');
     renderVehicleHistory([raw], plate);
   } catch (e) {
@@ -756,17 +772,9 @@ async function fetchOwnershipHistory(plate) {
   });
 
   try {
-    const res = await fetch(govEndpoint(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const d = await res.json();
-
+    const d = await govFetch(payload);
     const records = d?.Results ?? d?.results ?? [];
     const total   = d?.TotalResults ?? records.length;
-
     if (!records.length) throw new Error('empty');
     renderOwnershipHistory(records, total, plate);
   } catch (e) {
