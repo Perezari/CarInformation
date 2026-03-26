@@ -675,32 +675,22 @@ async function govFetch(payload) {
   throw new Error('all proxies failed');
 }
 
+const CKAN_HISTORY   = '56063a99-8a3e-4ff4-912e-5966c0279bad'; // היסטוריית טסטים + קילומטרז'
+
 async function fetchTestHistory(plate) {
   const kmBody = document.getElementById('kmBody');
   kmBody.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נסועה ומידע היסטורי...</div>`;
 
-  const payload = JSON.stringify({
-    DynamicTemplateID: DG_TEMPLATE,
-    From: 0,
-    QueryFilters: {
-      mispar_rechev: { Query: plate },
-      skip:          { Query: 0 }
-    }
-  });
-
   try {
-    const d = await govFetch(payload);
-    const raw = d?.Results?.[0]?.Data ?? d?.results?.[0]?.Data ??
-                d?.Results?.[0]       ?? d?.results?.[0]       ??
-                d?.Data               ?? (Array.isArray(d) ? d[0] : null);
-    if (!raw) throw new Error('no data');
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_HISTORY}&q=${plate}`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) throw new Error('failed');
+    const raw = d.result?.records?.find(r => String(r.mispar_rechev) === String(plate));
+    if (!raw) throw new Error('not found');
     renderVehicleHistory([raw], plate);
   } catch (e) {
-    kmBody.innerHTML = `
-      <div class="km-no-data">
-        <i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>
-        לא ניתן לשלוף נתוני נסועה כרגע.
-      </div>`;
+    kmBody.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא ניתן לשלוף נתוני נסועה כרגע.</div>`;
   }
 }
 
@@ -767,24 +757,20 @@ function renderVehicleHistory(records, plate) {
 }
 
 // ─── Ownership history ────────────────────────────────────────
+const CKAN_OWNERSHIP = 'bb2355dc-9ec7-4f06-9c3f-3344672171da'; // היסטוריית בעלויות
+
 async function fetchOwnershipHistory(plate) {
   const el = document.getElementById('ownershipBody');
   el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף היסטוריית בעלויות...</div>`;
 
-  const payload = JSON.stringify({
-    DynamicTemplateID: DG_TEMPLATE_OWNERSHIP,
-    From: 0,
-    QueryFilters: {
-      mispar_rechev: { Query: plate },
-      skip:          { Query: 0 }
-    }
-  });
-
   try {
-    const d = await govFetch(payload);
-    const records = d?.Results ?? d?.results ?? [];
-    const total   = d?.TotalResults ?? records.length;
-    if (!records.length) throw new Error('empty');
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_OWNERSHIP}&q=${plate}&limit=50`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) throw new Error('failed');
+    const records = d.result?.records?.filter(r => String(r.mispar_rechev) === String(plate));
+    if (!records?.length) throw new Error('not found');
+    const total = records.length;
     renderOwnershipHistory(records, total, plate);
   } catch (e) {
     el.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-users-slash" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא נמצאו נתוני בעלויות.</div>`;
@@ -794,10 +780,9 @@ async function fetchOwnershipHistory(plate) {
 function renderOwnershipHistory(records, total, plate) {
   const el = document.getElementById('ownershipBody');
 
-  // Extract Data objects — structure: [{Data:{baalut, baalut_dt, mispar_rechev, totalresults}}]
-  const items = records.map(r => r?.Data ?? r).filter(Boolean);
-  const ownerCount = items[0]?.totalresults ?? total ?? items.length;
-
+  // CKAN structure: flat records with {mispar_rechev, baalut, baalut_dt, _id}
+  // baalut_dt is numeric: 202211 = 11/2022
+  const ownerCount = total;
   const ownerColor = ownerCount <= 1 ? 'var(--green)' : ownerCount <= 3 ? 'var(--accent)' : 'var(--red)';
   const ownerLabel = ownerCount === 1 ? 'יד ראשונה 🏆' : `עבר ${ownerCount} ידיים`;
 
@@ -813,12 +798,11 @@ function renderOwnershipHistory(records, total, plate) {
       </div>
     </div>`;
 
-  const rows = items.map((data, i) => {
-    const baalut = data?.baalut ?? '—';
-    // baalut_dt arrives as "202211" (YYYYMM) — format nicely
-    const rawDt  = String(data?.baalut_dt ?? '');
+  const rows = records.map((r, i) => {
+    const baalut = r.baalut ?? '—';
+    const rawDt  = String(r.baalut_dt ?? '');
     const date   = rawDt.length >= 6
-      ? `${rawDt.slice(4,6)}/${rawDt.slice(0,4)}`   // "202211" → "11/2022"
+      ? `${rawDt.slice(4,6)}/${rawDt.slice(0,4)}`
       : (rawDt || '—');
     return `
       <div class="data-row">
