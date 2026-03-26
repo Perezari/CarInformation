@@ -68,6 +68,6 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     print(f"\n  Car Lookup Server")
     print(f"  -----------------")
-    print(f"  http://localhost:{PORT}/car-lookup.html")
+    print(f"  http://localhost:{PORT}/index.html")
     print(f"  Ctrl+C לעצירה\n")
     http.server.HTTPServer(("", PORT), Handler).serve_forever()
