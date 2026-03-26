@@ -526,6 +526,19 @@
       </div>
     </div>
 
+    <!-- היסטוריית בעלויות -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="km-section">
+        <div class="km-header">
+          <div class="km-title"><i class="fa-solid fa-users"></i> היסטוריית בעלויות</div>
+          <a id="ownershipLink" href="#" target="_blank" class="findcar-btn">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> מלא ב-gov.il
+          </a>
+        </div>
+        <div id="ownershipBody"><div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף היסטוריית בעלויות...</div></div>
+      </div>
+    </div>
+
     <div class="footer-note">
       <div class="footer-icon"><i class="fa-solid fa-circle-info"></i></div>
       <span>המידע נשלף בזמן אמת ממסד נתונים.gov.il — המשרד לתחבורה ובטיחות בדרכים. התמונה נשלפת לפי דגם הרכב ועשויה להיות ייצוגית בלבד.</span>
@@ -602,8 +615,16 @@ function copyPlate() {
 //   mkoriut_nm, mispar_rechev }, Description, UrlName }], TotalResults }
 
 const DG_ENDPOINT  = 'https://www.gov.il/he/api/DataGovProxy/GetDGResults';
-const DG_TEMPLATE  = '76a0abf9-d45a-4040-924b-e2f5cefe2ae4';
-const LOCAL_PROXY  = '/gov-proxy';   // served by server.py
+const DG_TEMPLATE  = '76a0abf9-d45a-4040-924b-e2f5cefe2ae4';  // היסטוריית טסטים
+const DG_TEMPLATE_OWNERSHIP = '146b975c-70b5-4fc3-995e-d4db2e7e2ca7'; // היסטוריית בעלויות
+const LOCAL_PROXY  = '/gov-proxy';
+const CORS_PROXY   = 'https://corsproxy.io/?';
+
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+function govEndpoint() {
+  if (IS_LOCAL) return LOCAL_PROXY;
+  return CORS_PROXY + encodeURIComponent(DG_ENDPOINT);
+}
 
 async function fetchTestHistory(plate) {
   const kmBody = document.getElementById('kmBody');
@@ -618,39 +639,28 @@ async function fetchTestHistory(plate) {
     }
   });
 
-  // Try local proxy first (server.py), then fall back to direct (for hosted deployments)
-  const endpoints = [LOCAL_PROXY, DG_ENDPOINT];
+  try {
+    const res = await fetch(govEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
 
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload
-      });
-      if (!res.ok) continue;
-      const d = await res.json();
+    const raw = d?.Results?.[0]?.Data ?? d?.results?.[0]?.Data ??
+                d?.Results?.[0]       ?? d?.results?.[0]       ??
+                d?.Data               ?? (Array.isArray(d) ? d[0] : null);
 
-      // Real structure: { Results: [{ Data: {...} }] }
-      const raw = d?.Results?.[0]?.Data ?? d?.results?.[0]?.Data ??
-                  d?.Results?.[0]       ?? d?.results?.[0]       ??
-                  d?.Data               ?? (Array.isArray(d) ? d[0] : null);
-
-      if (!raw) continue;
-      renderVehicleHistory([raw], plate);
-      return;
-    } catch (_) { continue; }
+    if (!raw) throw new Error('no data');
+    renderVehicleHistory([raw], plate);
+  } catch (e) {
+    kmBody.innerHTML = `
+      <div class="km-no-data">
+        <i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>
+        לא ניתן לשלוף נתוני נסועה כרגע.
+      </div>`;
   }
-
-  kmBody.innerHTML = `
-    <div class="km-no-data">
-      <i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>
-      לא ניתן לשלוף נתוני נסועה כרגע.<br>
-      <span style="font-size:0.8rem;margin-top:6px;display:block;color:var(--text-muted)">
-        הפעל <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px">python server.py</code>
-        ואז פתח <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px">http://localhost:8080/car-lookup.html</code>
-      </span>
-    </div>`;
 }
 
 function renderVehicleHistory(records, plate) {
@@ -713,6 +723,82 @@ function renderVehicleHistory(records, plate) {
       <div style="margin-top:8px; line-height:1.8; direction:ltr;">${rawKeys}</div>
     </details>`;
   }
+}
+
+// ─── Ownership history ────────────────────────────────────────
+async function fetchOwnershipHistory(plate) {
+  const el = document.getElementById('ownershipBody');
+  el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף היסטוריית בעלויות...</div>`;
+
+  const payload = JSON.stringify({
+    DynamicTemplateID: DG_TEMPLATE_OWNERSHIP,
+    From: 0,
+    QueryFilters: {
+      mispar_rechev: { Query: plate },
+      skip:          { Query: 0 }
+    }
+  });
+
+  try {
+    const res = await fetch(govEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+
+    const records = d?.Results ?? d?.results ?? [];
+    const total   = d?.TotalResults ?? records.length;
+
+    if (!records.length) throw new Error('empty');
+    renderOwnershipHistory(records, total, plate);
+  } catch (e) {
+    el.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-users-slash" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא נמצאו נתוני בעלויות.</div>`;
+  }
+}
+
+function renderOwnershipHistory(records, total, plate) {
+  const el = document.getElementById('ownershipBody');
+
+  // Extract Data objects — structure: [{Data:{baalut, baalut_dt, mispar_rechev, totalresults}}]
+  const items = records.map(r => r?.Data ?? r).filter(Boolean);
+  const ownerCount = items[0]?.totalresults ?? total ?? items.length;
+
+  const ownerColor = ownerCount <= 1 ? 'var(--green)' : ownerCount <= 3 ? 'var(--accent)' : 'var(--red)';
+  const ownerLabel = ownerCount === 1 ? 'יד ראשונה 🏆' : `עבר ${ownerCount} ידיים`;
+
+  let html = `
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--border);">
+      <div style="text-align:center; flex-shrink:0;">
+        <div style="font-size:2.8rem; font-weight:900; color:${ownerColor}; line-height:1;">${ownerCount}</div>
+        <div style="font-size:0.7rem; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-top:2px;">ידיים</div>
+      </div>
+      <div>
+        <div style="font-size:1rem; font-weight:800; color:var(--text);">${ownerLabel}</div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">לפי רישומי משרד התחבורה</div>
+      </div>
+    </div>`;
+
+  const rows = items.map((data, i) => {
+    const baalut = data?.baalut ?? '—';
+    // baalut_dt arrives as "202211" (YYYYMM) — format nicely
+    const rawDt  = String(data?.baalut_dt ?? '');
+    const date   = rawDt.length >= 6
+      ? `${rawDt.slice(4,6)}/${rawDt.slice(0,4)}`   // "202211" → "11/2022"
+      : (rawDt || '—');
+    return `
+      <div class="data-row">
+        <span class="data-label" style="display:flex;align-items:center;gap:7px;">
+          <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;flex-shrink:0;">${i+1}</span>
+          ${baalut}
+        </span>
+        <span class="data-value" style="color:var(--text-dim);">${date}</span>
+      </div>`;
+  }).join('');
+
+  html += `<div>${rows}</div>`;
+  el.innerHTML = html;
 }
 
 // ─── Utilities ───────────────────────────────────────────────
@@ -915,9 +1001,11 @@ async function fetchCar() {
 
     // ── gov.il history link ──
     document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
+    document.getElementById('ownershipLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_2?skip=0&mispar_rechev=${raw}`;
 
-    // ── Test history + mileage (async, non-blocking) ──
+    // ── Test history + mileage + ownership (async, non-blocking) ──
     fetchTestHistory(raw);
+    fetchOwnershipHistory(raw);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
