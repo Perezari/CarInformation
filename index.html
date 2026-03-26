@@ -652,16 +652,25 @@ async function govFetch(payload) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   }
+
   for (const proxyFn of CORS_PROXIES) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch(proxyFn(DG_ENDPOINT), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload,
-        signal: AbortSignal.timeout(8000)
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal: controller.signal
       });
+      clearTimeout(timer);
       if (!res.ok) continue;
       const d = await res.json();
       if (d?.Results || d?.results || d?.TotalResults !== undefined) return d;
-    } catch (_) { continue; }
+    } catch (_) {
+      clearTimeout(timer);
+      continue;
+    }
   }
   throw new Error('all proxies failed');
 }
