@@ -415,6 +415,17 @@
     </button>
   </div>
 
+  <!-- Off-road warning banner -->
+  <div id="offRoadBanner" style="display:none; margin-bottom:16px; padding:16px 20px;
+    background:rgba(239,68,68,0.1); border:1.5px solid rgba(239,68,68,0.4);
+    border-radius:16px; display:none; align-items:center; gap:14px;">
+    <i class="fa-solid fa-triangle-exclamation" style="color:var(--red);font-size:1.4rem;flex-shrink:0;"></i>
+    <div>
+      <div style="font-weight:800;color:var(--red);font-size:0.95rem;">⚠️ רכב זה ירד מהכביש</div>
+      <div id="offRoadDetails" style="font-size:0.82rem;color:var(--text-muted);margin-top:3px;"></div>
+    </div>
+  </div>
+
   <!-- Hero -->
     <div class="hero-panel">
       <div class="car-image-wrap" id="imgWrap">
@@ -806,6 +817,35 @@ function renderOwnershipHistory(records, total, plate) {
   el.innerHTML = html;
 }
 
+// ─── Off-road check ───────────────────────────────────────────
+async function fetchOffRoad(plate, standalone = false) {
+  const banner = document.getElementById('offRoadBanner');
+  const details = document.getElementById('offRoadDetails');
+  banner.style.display = 'none';
+
+  try {
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=851ecab1-0622-4dbe-a6c7-f950cf82abf9&q=${plate}`;
+    const res = await fetch(url);
+    const d = await res.json();
+
+    if (!d.success) return;
+    const match = d.result?.records?.find(r => String(r.mispar_rechev) === String(plate));
+    if (!match) return;
+
+    const make  = match.tozeret_nm || '';
+    const model = match.degem_nm   || '';
+    details.textContent = (make || model ? `${make} ${model}`.trim() + ' — ' : '') + 'מופיע במאגר כלי רכב שירדו מהכביש (ביטול סופי)';
+    banner.style.display = 'flex';
+
+    // If main lookup failed, show banner standalone above search
+    if (standalone) {
+      banner.style.marginTop = '0';
+      document.getElementById('resultCard').style.display = 'none';
+      document.querySelector('.search-wrap').after(banner);
+    }
+  } catch (_) {}
+}
+
 // ─── Stolen car check ────────────────────────────────────────
 function openStolenCheck() {
   const plate = document.getElementById('stolenRaw')?.value || '';
@@ -1029,14 +1069,17 @@ async function fetchCar() {
     document.getElementById('ownershipLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_2?skip=0&mispar_rechev=${raw}`;
     document.getElementById('stolenRaw').value = raw;
 
-    // ── Test history + mileage + ownership (async, non-blocking) ──
+    // ── Test history + mileage + ownership + off-road (async, non-blocking) ──
     fetchTestHistory(raw);
     fetchOwnershipHistory(raw);
+    fetchOffRoad(raw);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
 
   } catch (e) {
+    // Still check if car is off-road even if not in active registry
+    fetchOffRoad(raw, true);
     statusMsg('<span class="status-error"><i class="fa-solid fa-triangle-exclamation"></i> לא נמצאו נתונים למספר רישוי זה</span>');
   }
 }
