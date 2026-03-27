@@ -559,7 +559,7 @@
     <div class="sections-grid" style="margin-top:16px">
       <div class="km-section">
         <div class="km-header">
-          <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> קריאות שירות (Recall)</div>
+          <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> ריקולים שלא בוצעו</div>
           <a href="https://www.gov.il/he/departments/dynamiccollectors/recall" target="_blank" class="findcar-btn">
             <i class="fa-solid fa-arrow-up-right-from-square"></i> מלא ב-gov.il
           </a>
@@ -831,84 +831,23 @@ function renderOwnershipHistory(records, total, plate) {
   el.innerHTML = html;
 }
 
-// ─── Recalls ──────────────────────────────────────────────────
-const CKAN_RECALL = '2c33523f-87aa-44ec-a736-edbb0a82975e';
+// ─── Recalls (open / not performed) ──────────────────────────
+const CKAN_RECALL = '36bf1404-0be4-49d2-82dc-2f1ead4a8b93';
 
-// מיפוי עברית → אנגלית לחיפוש ריקולים
-const BRAND_HEB_ENG = {
-  'אודי':'AUDI','טויוטה':'TOYOTA','מאזדה':'MAZDA','הונדה':'HONDA',
-  'ניסאן':'NISSAN','מיצובישי':'MITSUBISHI','יונדאי':'HYUNDAI','קיה':'KIA',
-  'מרצדס':'MERCEDES','פולקסווגן':'VOLKSWAGEN','סקודה':'SKODA','סיאט':'SEAT',
-  'פיאט':'FIAT',"פז'ו":'PEUGEOT','רנו':'RENAULT','סיטרואן':'CITROEN',
-  'אופל':'OPEL','פורד':'FORD','שברולט':'CHEVROLET','סובארו':'SUBARU',
-  'סוזוקי':'SUZUKI','טסלה':'TESLA','וולוו':'VOLVO','לקסוס':'LEXUS',
-  'אינפיניטי':'INFINITI',"ג'יפ":'JEEP','פורשה':'PORSCHE','מיני':'MINI',
-  "דאצ'יה":'DACIA','ספארי':'ISUZU','איסוזו':'ISUZU','סאנגיונג':'SSANGYONG',
-  'ב מ וו':'BMW','ב.מ.וו':'BMW',
-};
-
-function extractBrandEng(tozetNm) {
-  if (!tozetNm) return null;
-  const lower = tozetNm.trim();
-  // Try multi-word first, then single word
-  for (const [heb, eng] of Object.entries(BRAND_HEB_ENG)) {
-    if (lower.includes(heb)) return eng;
-  }
-  // Try English brand directly in name (e.g. "BMW")
-  const engMatch = lower.match(/[A-Z]{2,}/);
-  return engMatch ? engMatch[0] : null;
-}
-
-function extractModelKeyword(kinuy) {
-  if (!kinuy) return null;
-  // kinuy like "Q5 SPORTBACK" → "Q5", "MAZDA CX-5" → "CX-5" or "MAZDA"
-  const parts = kinuy.trim().split(/\s+/);
-  // Return first part that looks like a model (not just brand)
-  return parts[0] || null;
-}
-
-async function fetchRecalls(tozetNm, kinuyMishari) {
+async function fetchRecalls(plate) {
   const el = document.getElementById('recallBody');
-  if (!tozetNm && !kinuyMishari) {
-    el.innerHTML = `<div class="km-no-data">אין מידע זמין.</div>`; return;
-  }
-  el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בודק קריאות שירות...</div>`;
+  el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בודק ריקולים פתוחים...</div>`;
 
   try {
-    const brandEng = extractBrandEng(tozetNm);
-    const modelKw  = extractModelKeyword(kinuyMishari);
-
-    // Search by brand name + model keyword via full-text q
-    const searchTerm = [brandEng, modelKw].filter(Boolean).join(' ');
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_RECALL}&q=${encodeURIComponent(searchTerm)}&limit=250`;
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_RECALL}&q=${plate}&limit=100`;
     const res = await fetch(url);
     const d   = await res.json();
     if (!d.success) throw new Error('failed');
 
-    let records = d.result?.records ?? [];
+    let records = (d.result?.records ?? [])
+      .filter(r => String(r.MISPAR_RECHEV) === String(plate));
 
-    // Filter: brand must match TOZAR_TEUR, model must appear in DEGEM
-    if (brandEng) records = records.filter(r =>
-      (r.TOZAR_TEUR || '').toUpperCase().includes(brandEng));
-
-    if (modelKw) {
-      const mku = modelKw.toUpperCase();
-      records = records.filter(r => {
-        // DEGEM can be "Q5", "Q5,Q5E", "R8,TT" — split by comma/space and check each token
-        const tokens = (r.DEGEM || '').toUpperCase().split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
-        return tokens.some(t => t === mku || t.startsWith(mku + ' ') || t.startsWith(mku + ','));
-      });
-    }
-
-    // Deduplicate by RECALL_ID
-    const seen = new Set();
-    records = records.filter(r => {
-      if (seen.has(r.RECALL_ID)) return false;
-      seen.add(r.RECALL_ID); return true;
-    });
-
-    // Sort by recall year descending
-    records.sort((a, b) => (b.SHNAT_RECALL || 0) - (a.SHNAT_RECALL || 0));
+    records.sort((a, b) => (b.TAARICH_PTICHA || '').localeCompare(a.TAARICH_PTICHA || ''));
 
     renderRecalls(records);
   } catch (e) {
@@ -922,50 +861,34 @@ function renderRecalls(records) {
   if (!records.length) {
     el.innerHTML = `<div class="km-no-data" style="color:var(--green)">
       <i class="fa-solid fa-circle-check" style="font-size:1.4rem;display:block;margin-bottom:10px"></i>
-      לא נמצאו קריאות שירות לרכב זה ✓</div>`;
+      לא נמצאו ריקולים פתוחים לרכב זה ✓</div>`;
     return;
   }
 
   const rows = records.map(r => {
-    const title    = r.SUG_RECALL   || 'קריאת שירות';
-    const problem  = r.SUG_TAKALA   || '';
-    const fix      = r.OFEN_TIKUN   || '';
-    const year     = r.SHNAT_RECALL || '';
-    const begin    = r.BUILD_BEGIN_A ? String(r.BUILD_BEGIN_A).slice(0,10) : '';
-    const end      = r.BUILD_END_A   ? String(r.BUILD_END_A).slice(0,10)   : '';
-    const phone    = r.TELEPHONE     || '';
-    const website  = r.WEBSITE       || '';
+    const type     = r.SUG_RECALL    || 'קריאת שירות';
+    const category = r.SUG_TAKALA    || '';
+    const desc     = r.TEUR_TAKALA   || '';
+    const date     = r.TAARICH_PTICHA ? fDate(r.TAARICH_PTICHA) : '';
     const recallId = r.RECALL_ID     || '';
-    const importer  = r.YUVUAN_TEUR  || '';
-    const standard  = r.TKINA_EU     || '';
-    const teurTakala = r.TEUR_TAKALA || '';
 
     return `<div style="padding:14px 0; border-bottom:1px solid var(--border);">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-        <span style="font-size:0.88rem;font-weight:700;color:var(--accent);">${title}</span>
+        <span style="font-size:0.88rem;font-weight:700;color:var(--red);">${type}</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
-          ${standard ? `<span style="font-size:0.7rem;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:2px 8px;color:var(--blue);">${standard}</span>` : ''}
-          <span style="font-size:0.72rem;background:rgba(232,168,37,0.1);border:1px solid rgba(232,168,37,0.25);border-radius:6px;padding:2px 8px;color:var(--accent);white-space:nowrap;">
-            ${year ? `שנת ריקול: ${year}` : `#${recallId}`}
-          </span>
+          ${date ? `<span style="font-size:0.72rem;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:2px 8px;color:var(--red);white-space:nowrap;">${date}</span>` : ''}
+          ${recallId ? `<span style="font-size:0.72rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;padding:2px 8px;color:var(--text-muted);">#${recallId}</span>` : ''}
         </div>
       </div>
-      ${importer ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;"><i class="fa-solid fa-building" style="margin-left:4px;opacity:0.7;"></i>${importer}</div>` : ''}
-      ${problem    ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;"><b style="color:var(--text-muted);">סוג תקלה:</b> ${problem}</div>` : ''}
-      ${teurTakala ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;line-height:1.5;"><b style="color:var(--text-muted);">תיאור:</b> ${teurTakala}</div>` : ''}
-      ${fix      ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;"><b style="color:var(--text-muted);">תיקון:</b> ${fix}</div>` : ''}
-      ${(begin||end) ? `<div style="font-size:0.76rem;color:var(--text-muted);">טווח ייצור: ${begin}${end ? ' — '+end : ''}</div>` : ''}
-      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;">
-        ${phone   ? `<a href="tel:${phone}" style="font-size:0.75rem;color:var(--blue);text-decoration:none;"><i class="fa-solid fa-phone"></i> ${phone}</a>` : ''}
-        ${website ? `<a href="${website.startsWith('http') ? website : 'https://'+website}" target="_blank" style="font-size:0.75rem;color:var(--blue);text-decoration:none;"><i class="fa-solid fa-globe"></i> אתר שירות</a>` : ''}
-      </div>
+      ${category ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;font-weight:600;">${category}</div>` : ''}
+      ${desc     ? `<div style="font-size:0.82rem;color:var(--text-dim);line-height:1.6;">${desc}</div>` : ''}
     </div>`;
   }).join('');
 
   el.innerHTML = `
-    <div style="margin-bottom:16px;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:10px;display:flex;align-items:center;gap:10px;">
-      <i class="fa-solid fa-triangle-exclamation" style="color:var(--red);font-size:1.1rem;flex-shrink:0;"></i>
-      <span style="font-size:0.85rem;font-weight:700;color:var(--red);">נמצאו ${records.length} קריאות שירות לדגם זה</span>
+    <div style="margin-bottom:16px;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:10px;display:flex;align-items:center;gap:10px;">
+      <i class="fa-solid fa-circle-exclamation" style="color:var(--red);font-size:1.1rem;flex-shrink:0;"></i>
+      <span style="font-size:0.88rem;font-weight:700;color:var(--red);">⚠️ נמצאו ${records.length} ריקולים שלא בוצעו לרכב זה</span>
     </div>
     <div>${rows}</div>`;
 }
@@ -1054,27 +977,42 @@ function licenseChip(dateStr) {
 }
 
 // ─── Car image from Wikipedia ─────────────────────────────────
-// kinuyEn = e.g. "MAZDA CX-5"  →  try "Mazda CX-5", "Mazda CX5", "Mazda" etc.
-async function loadCarImage(kinuyEn) {
+async function loadCarImage(kinuyEn, engBrand) {
   const shimmer = document.getElementById('shimmer');
   const img = document.getElementById('carImg');
 
-  // Normalize to Title Case
   const titleCase = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  // Keep uppercase only for model codes like CX-5, Q5, E-TRON (contain digit or hyphen)
+  // Regular words like GRAND, CHEROKEE, MAZDA → Title Case
+  const smartCase = s => s.trim().split(/\s+/).map(w =>
+    /[\d-]/.test(w) ? w.toUpperCase() : titleCase(w)
+  ).join(' ');
 
-  // Build progressive candidates – English only, no Hebrew
-  const parts = kinuyEn.trim().split(/\s+/);          // ["MAZDA","CX-5"]
-  const brand  = titleCase(parts[0]);                   // "Mazda"
-  const rest   = parts.slice(1).join(' ');              // "CX-5"
-  const restNoHyphen = rest.replace(/-/g, '');         // "CX5"
+  // Strip Israeli registry suffixes that don't appear in Wikipedia
+  // e.g. "SUPERB FL" → "SUPERB", "CX-5 AWD" → "CX-5"
+  const IL_SUFFIXES = /\b(FL|PHEV|HEV|MHEV|EV|AWD|4WD|4X4|SW|ST|SPORT|CROSS|PLUS|PRO|MAX|ELITE|PREMIUM|LUXURY|ACTIVE|STYLE|AMBITION|EXECUTIVE|LIMITED|SIGNATURE|PRESTIGE|MOTION|COMFORT|TREND|DESIGN|PULSE|ALLURE|FEEL|SHINE|PURETECH|BLUEHDI|ETSI|TSI|TDI|TFSI|FSI|GDI|CRDI|D|T|S|E|G|N|R)\b/g;
+  const cleanKinuy = kinuyEn.replace(IL_SUFFIXES, '').replace(/\s+/g, ' ').trim();
+
+  const kinuy = smartCase(cleanKinuy || kinuyEn || '');
+  const brand = titleCase((engBrand || '').trim());
+
+  // Does kinuy already start with the brand name?
+  const kinuyHasBrand = brand && kinuy.toLowerCase().startsWith(brand.toLowerCase());
+  const fullName = kinuyHasBrand ? kinuy : [brand, kinuy].filter(Boolean).join(' ');
+  // e.g. "Jeep Grand Cherokee", "Mazda CX-5"
+
+  const noHyphen  = fullName.replace(/-/g, '');
+  // Also try adding hyphen before digits: "Mazda CX5" → "Mazda CX-5"
+  const withHyphen = fullName.replace(/([A-Za-z])(\d)/g, '$1-$2');
 
   const candidates = [
-    rest   ? `${brand} ${rest}`       : null,           // "Mazda CX-5"
-    rest   ? `${brand} ${restNoHyphen}` : null,         // "Mazda CX5"
-    rest   ? `${brand}_${rest.replace(/\s/g,'_')}` : null, // "Mazda_CX-5"
-    brand,                                               // "Mazda"
-    rest   ? `${brand} ${rest} car`   : null,
-  ].filter(Boolean);
+    fullName,                          // "Mazda CX-5" / "Jeep Grand Cherokee"
+    withHyphen,                        // "Mazda CX-5" (if CX5 was input)
+    noHyphen,                          // "Mazda CX5"
+    fullName.replace(/\s/g, '_'),      // "Mazda_CX-5"
+    brand || kinuy,                    // "Mazda"
+    fullName + ' car',
+  ].filter((v, i, a) => v && a.indexOf(v) === i);
 
   for (const term of candidates) {
     try {
@@ -1085,17 +1023,13 @@ async function loadCarImage(kinuyEn) {
       if (data.thumbnail?.source) {
         const src = data.thumbnail.source.replace(/\/\d+px-/, '/600px-');
         img.src = src;
-        img.onload = () => {
-          shimmer.style.display = 'none';
-          img.style.opacity = '1';
-          img.classList.add('loaded');
-        };
-        img.onerror = () => loadFallbackImage(brand);
+        img.onload = () => { shimmer.style.display = 'none'; img.style.opacity = '1'; img.classList.add('loaded'); };
+        img.onerror = () => loadFallbackImage(brand || kinuy);
         return;
       }
     } catch (_) {}
   }
-  loadFallbackImage(brand);
+  loadFallbackImage(brand || kinuy);
 }
 
 function loadFallbackImage(brand) {
@@ -1126,12 +1060,14 @@ const BRAND_MAP = {
   peugeot:'peugeot', renault:'renault', citroen:'citroen', fiat:'fiat',
   subaru:'subaru', suzuki:'suzuki', tesla:'tesla', volvo:'volvo',
   jeep:'jeep', dodge:'dodge', chevrolet:'chevrolet', lexus:'lexus',
+  chrysler:'jeep', 'grand cherokee':'jeep', 'grand_cherokee':'jeep',
   infiniti:'infiniti', dacia:'dacia', seat:'seat', cupra:'cupra',
 };
-function loadBrandLogo(fullName) {
+function loadBrandLogo(kinuyEn, tozetNm, engBrand) {
   const logo = document.getElementById('brandLogo');
   logo.style.display = 'none';
-  const key = Object.keys(BRAND_MAP).find(k => fullName.toLowerCase().includes(k));
+  const search = [kinuyEn, tozetNm, engBrand].filter(Boolean).join(' ').toLowerCase();
+  const key = Object.keys(BRAND_MAP).find(k => search.includes(k));
   if (!key) return;
   logo.src = `https://cdn.jsdelivr.net/gh/filippofilip95/car-logos-dataset/logos/thumb/${BRAND_MAP[key]}.png`;
   logo.onload = () => { logo.style.display = 'block'; };
@@ -1207,11 +1143,29 @@ async function fetchCar() {
     renderCountdown(c.tokef_dt);
 
     // ── Image & logo ──
-    // kinuy_mishari is always English (e.g. "MAZDA CX-5") – use it directly for Wikipedia
     const kinuyEn = (c.kinuy_mishari || '').trim();
-    const searchTerm = kinuyEn || (makeHeb.match(/[a-zA-Z]+(?:\s+[a-zA-Z0-9-]+)*/)?.[0] || 'car');
-    loadBrandLogo(kinuyEn || makeHeb);
-    loadCarImage(searchTerm);
+    // Extract English brand from tozeret_nm — may be Hebrew (e.g. "מאזדה יפן")
+    const HEB_TO_ENG = {
+      'מאזדה':'Mazda','טויוטה':'Toyota','הונדה':'Honda','ניסאן':'Nissan',
+      'יונדאי':'Hyundai','קיה':'Kia','מיצובישי':'Mitsubishi','סובארו':'Subaru',
+      'סוזוקי':'Suzuki','אינפיניטי':'Infiniti','לקסוס':'Lexus',
+      'פולקסווגן':'Volkswagen','אאודי':'Audi','אודי':'Audi',
+      'סקודה':'Skoda',"סקודה צ'כיה":'Skoda',
+      'סיאט':'Seat','קופרה':'Cupra','מרצדס':'Mercedes','ב מ וו':'BMW','ב.מ.וו':'BMW',
+      'פיאט':'Fiat',"פז'ו":'Peugeot','רנו':'Renault','סיטרואן':'Citroen',
+      'אופל':'Opel','פורד':'Ford','שברולט':'Chevrolet','דאצ\'יה':'Dacia',
+      'וולוו':'Volvo','טסלה':'Tesla','פורשה':'Porsche','מיני':'Mini',
+      'קריזלר':'Jeep',"ג'יפ":'Jeep','דודג\'':'Dodge',
+      'לנד רובר':'Land Rover','יגואר':'Jaguar','אלפא רומיאו':'Alfa Romeo',
+    };
+    const tozetNm = c.tozeret_nm || '';
+    let engBrand = tozetNm.match(/[a-zA-Z]+(?:[\s-][a-zA-Z]+)*/)?.[0] || '';
+    if (!engBrand) {
+      const hebKey = Object.keys(HEB_TO_ENG).find(k => tozetNm.includes(k));
+      if (hebKey) engBrand = HEB_TO_ENG[hebKey];
+    }
+    loadBrandLogo(kinuyEn, tozetNm, engBrand);
+    loadCarImage(kinuyEn, engBrand);
 
     // ── History ──
     const label = fPlate(raw) + (kinuyEn ? ` · ${kinuyEn}` : '');
@@ -1226,7 +1180,7 @@ async function fetchCar() {
     fetchTestHistory(raw);
     fetchOwnershipHistory(raw);
     fetchOffRoad(raw);
-    fetchRecalls(c.tozeret_nm, c.kinuy_mishari);
+    fetchRecalls(raw);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
@@ -1234,7 +1188,7 @@ async function fetchCar() {
   } catch (e) {
     // Still check if car is off-road even if not in active registry
     fetchOffRoad(raw, true);
-    statusMsg('<span class="status-error"><i class="fa-solid fa-triangle-exclamation"></i> לא נמצאו נתונים למספר רישוי זה</span>');
+    statusMsg(`<span class="status-error"><i class="fa-solid fa-triangle-exclamation"></i> לא נמצאו נתונים למספר רישוי זה — ייתכן שמדובר ברכב צבאי, דיפלומטי, או שאינו כלול במאגר הממשלתי הפתוח</span>`);
   }
 }
 
