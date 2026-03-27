@@ -583,9 +583,9 @@
       <div class="km-section">
         <div class="km-header">
           <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> ריקולים שלא בוצעו</div>
-          <a href="https://data.gov.il/he/datasets/ministry_of_transport/hagbalat_recall/36bf1404-0be4-49d2-82dc-2f1ead4a8b93" target="_blank" class="findcar-btn">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i> מלא ב-gov.il
-          </a>
+          <button onclick="openRecallSite()" class="findcar-btn" style="border:none;cursor:pointer;font-family:'Heebo',sans-serif;">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> <span id="recallBtnTxt">מלא ב-gov.il</span>
+          </button>
         </div>
         <div id="recallBody"></div>
       </div>
@@ -945,6 +945,16 @@ async function fetchOffRoad(plate, standalone = false) {
       document.querySelector('.search-wrap').after(banner);
     }
   } catch (_) {}
+}
+
+function openRecallSite() {
+  const plate = document.getElementById('stolenRaw')?.value || '';
+  const btn = document.getElementById('recallBtnTxt');
+  navigator.clipboard.writeText(plate).then(() => {
+    if (btn) { btn.textContent = 'מספר הועתק — הדבק בחיפוש'; }
+    setTimeout(() => { if (btn) btn.textContent = 'מלא ב-gov.il'; }, 2500);
+  }).catch(() => {});
+  window.open('https://data.gov.il/he/datasets/ministry_of_transport/hagbalat_recall/36bf1404-0be4-49d2-82dc-2f1ead4a8b93', '_blank');
 }
 
 // ─── Stolen car check ────────────────────────────────────────
