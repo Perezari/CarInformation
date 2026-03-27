@@ -70,41 +70,42 @@
   .header p { color: var(--text-muted); font-size: 1rem; font-weight: 400; }
 
   /* ── Search ── */
-  .search-wrap { max-width: 580px; margin: 0 auto 48px; }
+  .search-wrap { max-width: 600px; margin: 0 auto 48px; }
   .search-box {
     position: relative;
-    background: var(--surface); border: 1.5px solid var(--border-active);
-    border-radius: 18px;
+    background: var(--surface);
+    border: 1.5px solid var(--border-active);
+    border-radius: 20px;
     transition: border-color 0.25s, box-shadow 0.25s;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
   }
   .search-box:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(232,168,37,0.12), 0 8px 32px rgba(0,0,0,0.3);
+    box-shadow: 0 0 0 4px rgba(232,168,37,0.12), 0 8px 40px rgba(0,0,0,0.35);
   }
   .search-input {
     width: 100%; background: none; border: none; outline: none;
-    padding: 20px 54px 20px 140px;
-    font-size: 1.1rem; color: var(--text);
+    padding: 22px 58px 22px 150px;
+    font-size: 1.25rem; color: var(--text);
     font-family: 'Heebo', sans-serif; direction: rtl;
-    border-radius: 18px; letter-spacing: 0.03em;
+    border-radius: 20px; letter-spacing: 0.06em; font-weight: 600;
   }
-  .search-input::placeholder { color: var(--text-muted); }
-  /* magnifier icon on the RIGHT (RTL start) */
+  .search-input::placeholder { color: var(--text-muted); font-weight: 400; letter-spacing: 0; }
   .search-icon {
-    position: absolute; top: 50%; right: 20px; transform: translateY(-50%);
-    color: var(--text-muted); font-size: 15px; pointer-events: none;
+    position: absolute; top: 50%; right: 22px; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 16px; pointer-events: none;
   }
-  /* button floats on the LEFT (RTL end) */
   .search-btn {
-    position: absolute; top: 6px; left: 6px; bottom: 6px;
+    position: absolute; top: 7px; left: 7px; bottom: 7px;
     background: var(--accent); color: #000; font-family: 'Heebo', sans-serif;
-    font-size: 0.9rem; font-weight: 800; border: none; cursor: pointer;
-    padding: 0 22px; border-radius: 12px;
+    font-size: 0.92rem; font-weight: 800; border: none; cursor: pointer;
+    padding: 0 26px; border-radius: 14px;
     display: flex; align-items: center; gap: 8px;
     transition: background 0.2s, transform 0.1s;
     white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(232,168,37,0.3);
   }
-  .search-btn:hover { background: var(--accent2); }
+  .search-btn:hover { background: var(--accent2); box-shadow: 0 4px 16px rgba(232,168,37,0.4); }
   .search-btn:active { transform: scale(0.97); }
 
   .search-status { text-align: center; margin-top: 14px; font-size: 0.9rem; min-height: 24px; }
@@ -315,23 +316,45 @@
     margin-right: 8px;
   }
   .recent-wrap {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    justify-content: center; margin-top: 12px; min-height: 28px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    justify-content: center; margin-top: 20px; min-height: 28px;
+    padding: 0 4px; row-gap: 14px;
   }
-  .recent-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; }
+  .recent-label {
+    font-size: 0.7rem; color: var(--text-muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    width: 100%; text-align: center; margin-bottom: 2px;
+  }
   .recent-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 100px; padding: 4px 12px; font-size: 0.78rem;
-    color: var(--text-dim); cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border-active);
+    border-radius: 100px; padding: 8px 16px 8px 12px;
+    font-size: 0.8rem; color: var(--text-dim);
+    cursor: pointer; transition: all 0.18s;
     font-family: 'Heebo', sans-serif;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   }
-  .recent-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .recent-chip img.chip-logo {
+    width: 22px; height: 22px; object-fit: contain;
+    filter: brightness(0) invert(1); opacity: 0.75; flex-shrink: 0;
+  }
+  .recent-chip .chip-car-icon {
+    font-size: 15px; opacity: 0.35; flex-shrink: 0; color: var(--text-muted);
+  }
+  .recent-chip:hover {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(232,168,37,0.06);
+    box-shadow: 0 4px 16px rgba(232,168,37,0.1);
+    transform: translateY(-1px);
+  }
+  .recent-chip:hover img.chip-logo { opacity: 1; filter: brightness(0) invert(1); }
   .recent-chip .rm {
-    opacity: 0.5; font-size: 10px; margin-right: 2px;
-    cursor: pointer; padding: 1px 3px;
+    opacity: 0; font-size: 11px; margin-right: -4px; margin-left: 2px;
+    cursor: pointer; padding: 2px 5px; border-radius: 50%;
+    transition: all 0.15s; flex-shrink: 0;
   }
-  .recent-chip .rm:hover { opacity: 1; color: var(--red); }
+  .recent-chip:hover .rm { opacity: 0.5; }
+  .recent-chip .rm:hover { opacity: 1 !important; color: var(--red); background: rgba(239,68,68,0.1); }
 
   /* ── Days countdown badge ── */
   .countdown-badge {
@@ -397,7 +420,7 @@
     </div>
     <div class="recent-wrap" id="recentWrap" style="display:none">
       <span class="recent-label">חיפושים אחרונים:</span>
-      <div id="recentChips"></div>
+      <div id="recentChips" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center;"></div>
     </div>
   </div>
 
@@ -560,7 +583,7 @@
       <div class="km-section">
         <div class="km-header">
           <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> ריקולים שלא בוצעו</div>
-          <a href="https://www.gov.il/he/departments/dynamiccollectors/recall" target="_blank" class="findcar-btn">
+          <a href="https://data.gov.il/he/datasets/ministry_of_transport/hagbalat_recall/36bf1404-0be4-49d2-82dc-2f1ead4a8b93" target="_blank" class="findcar-btn">
             <i class="fa-solid fa-arrow-up-right-from-square"></i> מלא ב-gov.il
           </a>
         </div>
@@ -581,9 +604,9 @@ const HISTORY_KEY = 'car_search_history';
 function getHistory() {
   try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
 }
-function addToHistory(plate, label) {
+function addToHistory(plate, label, logoUrl) {
   let h = getHistory().filter(x => x.plate !== plate);
-  h.unshift({ plate, label });
+  h.unshift({ plate, label, logo: logoUrl || '' });
   if (h.length > 5) h = h.slice(0,5);
   sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   renderHistory();
@@ -601,8 +624,10 @@ function renderHistory() {
   wrap.style.display = 'flex';
   chips.innerHTML = h.map(x => `
     <span class="recent-chip" onclick="loadFromHistory('${x.plate}')">
-      <i class="fa-solid fa-clock-rotate-left" style="font-size:10px"></i>
-      ${x.label}
+      ${x.logo
+        ? `<img src="${x.logo}" class="chip-logo" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<i class=\\'fa-solid fa-car chip-car-icon\\'></i>')">`
+        : `<i class="fa-solid fa-car chip-car-icon"></i>`}
+      <span style="margin: 0 2px;">${x.label}</span>
       <span class="rm" onclick="event.stopPropagation();removeFromHistory('${x.plate}')">✕</span>
     </span>`).join('');
 }
@@ -1081,11 +1106,14 @@ async function fetchCar() {
   statusMsg('<div class="status-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נתונים...</div>');
   document.getElementById('resultCard').style.display = 'none';
 
-  // Reset image
+  // Reset image + logo
   const img = document.getElementById('carImg');
   img.style.opacity = '0';
   img.src = '';
   document.getElementById('shimmer').style.display = 'block';
+  const logo = document.getElementById('brandLogo');
+  logo.style.display = 'none';
+  logo.src = '';
 
   try {
     const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${raw}`;
@@ -1169,7 +1197,8 @@ async function fetchCar() {
 
     // ── History ──
     const label = fPlate(raw) + (kinuyEn ? ` · ${kinuyEn}` : '');
-    addToHistory(raw, label);
+    const logoUrl = document.getElementById('brandLogo')?.src || '';
+    addToHistory(raw, label, logoUrl);
 
     // ── gov.il history link ──
     document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
