@@ -70,45 +70,80 @@
   .header p { color: var(--text-muted); font-size: 1rem; font-weight: 400; }
 
   /* ── Search ── */
+  /* ── OTP Plate Input ── */
   .search-wrap { max-width: 600px; margin: 0 auto 48px; }
-  .search-box {
-    position: relative;
-    background: var(--surface);
-    border: 1.5px solid var(--border-active);
-    border-radius: 20px;
-    transition: border-color 0.25s, box-shadow 0.25s;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
-  }
-  .search-box:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(232,168,37,0.12), 0 8px 40px rgba(0,0,0,0.35);
-  }
-  .search-input {
-    width: 100%; background: none; border: none; outline: none;
-    padding: 22px 58px 22px 150px;
-    font-size: 1.25rem; color: var(--text);
-    font-family: 'Heebo', sans-serif; direction: rtl;
-    border-radius: 20px; letter-spacing: 0.06em; font-weight: 600;
-  }
-  .search-input::placeholder { color: var(--text-muted); font-weight: 400; letter-spacing: 0; }
-  .search-icon {
-    position: absolute; top: 50%; right: 22px; transform: translateY(-50%);
-    color: var(--text-muted); font-size: 16px; pointer-events: none;
-  }
-  .search-btn {
-    position: absolute; top: 7px; left: 7px; bottom: 7px;
-    background: var(--accent); color: #000; font-family: 'Heebo', sans-serif;
-    font-size: 0.92rem; font-weight: 800; border: none; cursor: pointer;
-    padding: 0 26px; border-radius: 14px;
-    display: flex; align-items: center; gap: 8px;
-    transition: background 0.2s, transform 0.1s;
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(232,168,37,0.3);
-  }
-  .search-btn:hover { background: var(--accent2); box-shadow: 0 4px 16px rgba(232,168,37,0.4); }
-  .search-btn:active { transform: scale(0.97); }
 
-  .search-status { text-align: center; margin-top: 14px; font-size: 0.9rem; min-height: 24px; }
+  .plate-otp-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+    position: relative;
+  }
+
+  .plate-otp-boxes {
+    display: flex; align-items: center; gap: 8px;
+    cursor: text; direction: ltr;
+  }
+
+  .otp-cell {
+    width: 52px; height: 64px;
+    background: #181b22;
+    border: 2px solid rgba(232,168,37,0.15);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; font-weight: 800; color: var(--text);
+    font-family: 'Heebo', monospace;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    position: relative; user-select: none; overflow: hidden;
+  }
+  .otp-cell.active {
+    border-color: var(--accent);
+    background: rgba(232,168,37,0.08);
+    box-shadow: 0 0 0 3px rgba(232,168,37,0.15), 0 4px 20px rgba(232,168,37,0.1);
+  }
+  .otp-cell.active:not(.filled)::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: var(--accent);
+    border-radius: 0 0 2px 2px;
+    animation: blink 1s step-end infinite;
+  }
+  .otp-cell.filled {
+    border-color: rgba(232,168,37,0.35);
+    background: rgba(232,168,37,0.05);
+  }
+  .otp-cell.pop {
+    animation: pop 0.18s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  @keyframes pop {
+    0%  { transform: scale(1); }
+    50% { transform: scale(1.18); }
+    100%{ transform: scale(1); }
+  }
+
+  .plate-otp-hidden {
+    position: absolute; opacity: 0; pointer-events: none;
+    width: 1px; height: 1px;
+  }
+
+  .otp-search-btn {
+    background: var(--accent); color: #000;
+    font-family: 'Heebo', sans-serif; font-size: 1rem; font-weight: 800;
+    border: none; cursor: pointer;
+    padding: 14px 40px; border-radius: 14px;
+    display: flex; align-items: center; gap: 10px;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 4px 20px rgba(232,168,37,0.3);
+    width: 100%; justify-content: center; max-width: 320px;
+  }
+  .otp-search-btn:hover { background: var(--accent2); box-shadow: 0 6px 28px rgba(232,168,37,0.4); }
+  .otp-search-btn:active { transform: scale(0.97); }
+
+  @media (max-width: 480px) {
+    .otp-cell { width: 38px; height: 50px; font-size: 1.2rem; border-radius: 10px; }
+    .plate-otp-boxes { gap: 5px; }
+  }
+
+  .search-status { text-align: center; font-size: 0.9rem; min-height: 24px; }
   .status-loading { color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px; }
   .status-error { color: var(--red); }
   .spin { animation: spin 0.8s linear infinite; display: inline-block; }
@@ -409,11 +444,16 @@
 
   <!-- Search -->
   <div class="search-wrap">
-    <div class="search-box">
-      <span class="search-icon" style="padding-right: 18px;"><i class="fa-solid fa-magnifying-glass"></i></span>
-      <input type="text" id="plateInput" class="search-input" placeholder="מספר רישוי (לדוגמה: 1234567)"
-             onkeypress="if(event.key==='Enter') fetchCar()">
-      <button class="search-btn" onclick="fetchCar()"><i class="fa-solid fa-car"></i>&nbsp; חפש</button>
+    <div class="plate-otp-wrap">
+      <div class="plate-otp-boxes" id="plateBoxes"></div>
+      <input type="text" id="plateInput" class="plate-otp-hidden"
+             inputmode="numeric" maxlength="8" autocomplete="off"
+             onkeypress="if(event.key==='Enter') fetchCar()"
+             oninput="syncOtpBoxes()" onblur="otpBlur()" onfocus="otpFocus()">
+      <button class="otp-search-btn" onclick="fetchCar()">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span>חפש</span>
+      </button>
     </div>
     <div class="search-status">
       <div id="statusMsg"></div>
@@ -631,8 +671,69 @@ function renderHistory() {
       <span class="rm" onclick="event.stopPropagation();removeFromHistory('${x.plate}')">✕</span>
     </span>`).join('');
 }
+// ─── OTP Plate Input ─────────────────────────────────────────
+const OTP_MIN = 7, OTP_MAX = 8;
+let otpLen = 7; // default 7 cells, expands to 8
+
+function buildOtpCells(count) {
+  const box = document.getElementById('plateBoxes');
+  box.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'otp-cell';
+    cell.dataset.idx = i;
+    box.appendChild(cell);
+  }
+}
+
+function otpCells() { return document.querySelectorAll('#plateBoxes .otp-cell'); }
+
+function syncOtpBoxes() {
+  const raw = (document.getElementById('plateInput').value || '').replace(/\D/g,'');
+
+  // Expand to 8 when 8th digit is entered, shrink to 7 only when fully cleared
+  const needed = raw.length === 8 ? 8 : (raw.length === 0 ? 7 : otpLen);
+  if (needed !== otpLen) {
+    otpLen = needed;
+    buildOtpCells(otpLen);
+    // re-attach click listener
+    document.getElementById('plateBoxes').addEventListener('click', focusPlateInput);
+  }
+
+  otpCells().forEach((cell, i) => {
+    const ch = raw[i] || '';
+    const hadValue = cell.textContent !== '';
+    cell.textContent = ch;
+    cell.classList.toggle('filled', !!ch);
+    if (ch && !hadValue) {
+      cell.classList.remove('pop');
+      void cell.offsetWidth;
+      cell.classList.add('pop');
+    }
+  });
+  updateActiveCell(raw.length);
+}
+
+function updateActiveCell(len) {
+  otpCells().forEach(c => c.classList.remove('active'));
+  const cells = otpCells();
+  const idx = Math.min(len, cells.length - 1);
+  if (document.getElementById('plateInput') === document.activeElement) {
+    cells[idx]?.classList.add('active');
+  }
+}
+
+function focusPlateInput() { document.getElementById('plateInput').focus(); }
+function otpFocus() { updateActiveCell((document.getElementById('plateInput').value||'').replace(/\D/g,'').length); }
+function otpBlur()  { otpCells().forEach(c => c.classList.remove('active')); }
+
+// Init default cells
+buildOtpCells(otpLen);
+document.getElementById('plateBoxes').addEventListener('click', focusPlateInput);
+
 function loadFromHistory(plate) {
   document.getElementById('plateInput').value = plate;
+  syncOtpBoxes();
   fetchCar();
 }
 
