@@ -667,7 +667,6 @@
             <div class="car-model-name" id="carModel">—</div>
             <div class="plate-il">
               <div class="plate-il-flag">
-                <span class="flag-emoji">🇮🇱</span>
                 <span class="flag-text">IL</span>
               </div>
               <div class="plate-il-number" id="plateTxt">—</div>
@@ -1804,7 +1803,7 @@ function exportPDF() {
   const kmHero  = document.querySelector('#kmBody [style*="2.2rem"]')?.textContent?.trim() || '';
   const kmRows  = [...document.querySelectorAll('#kmBody .data-row')].map(row => {
     const spans = row.querySelectorAll('span');
-    return `<tr><td class="cell-label">${spans[0]?.textContent?.trim()||''}</td><td class="cell-value">${spans[1]?.textContent?.trim()||''}</td></tr>`;
+    return `<tr><td class="l">${spans[0]?.textContent?.trim()||''}</td><td class="v">${spans[1]?.textContent?.trim()||''}</td></tr>`;
   }).join('');
 
   const score = parseInt(healthNum) || 0;
@@ -1816,272 +1815,286 @@ function exportPDF() {
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>דוח רכב — ${plate}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --gold: #c9953a;
-    --gold-light: #e8c07a;
-    --ink: #8a7d6f;
-    --ink2: #2d2520;
-    --paper: #f9f5ef;
-    --paper2: #8a7d6f;
-    --line: #ddd5c8;
-    --muted: #8a7d6f;
-    --red: #b91c1c;
-    --green: #15803d;
-    --amber: #b45309;
+    --brown: #8a7d6f; --brown-dark: #5c524a; --brown-light: #b8aa9a;
+    --paper: #faf8f4; --paper2: #f2ede4; --line: #e0d8cc;
+    --ink: #5c524a; --muted: #8a7d6f;
+    --gold: #c9953a; --red: #b91c1c; --green: #15803d; --amber: #b45309;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  @page { size: A4 portrait; margin: 0; }
+
   body {
-    font-family: 'Heebo', sans-serif;
-    background: var(--paper);
-    color: var(--ink);
-    direction: rtl;
+    font-family: 'Heebo', sans-serif; background: #fff;
+    color: var(--ink); direction: rtl;
+    width: 210mm; min-height: 297mm;
   }
 
-  /* Print button */
-  .print-bar {
-    background: var(--ink); color: #fff;
-    padding: 12px 32px;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; position: sticky; top: 0; z-index: 100;
+  /* ── SCREEN TOOLBAR ── */
+  .toolbar {
+    background: var(--brown-dark); color:#fff;
+    padding: 10px 24px; display:flex; align-items:center;
+    justify-content:space-between;
+    position: sticky; top:0; z-index:100;
   }
-  .print-bar span { font-size: 0.85rem; opacity: 0.6; }
+  .back-btn {
+    display:inline-flex; align-items:center; gap:6px;
+    color:rgba(255,255,255,0.8); font-size:0.82rem; font-weight:600;
+    text-decoration:none; padding:5px 12px;
+    border:1px solid rgba(255,255,255,0.25); border-radius:6px;
+  }
   .print-btn {
-    background: var(--gold); color: #fff; border: none;
-    padding: 10px 28px; border-radius: 6px;
-    font-family: 'Heebo', sans-serif; font-size: 0.9rem; font-weight: 700;
-    cursor: pointer; display: flex; align-items: center; gap: 8px;
-    transition: background 0.2s;
+    background:var(--gold); color:#fff; border:none;
+    padding:8px 22px; border-radius:6px;
+    font-family:'Heebo',sans-serif; font-size:0.85rem; font-weight:700; cursor:pointer;
   }
-  .print-btn:hover { background: var(--gold-light); color: var(--ink); }
+  @media print { .toolbar { display:none !important; } }
 
-  /* Page */
-  .page {
-    max-width: 860px; margin: 0 auto;
-    padding: 48px 40px 60px;
+  /* ── PAGE WRAPPER ── */
+  .doc {
+    padding: 14mm 14mm 10mm;
+    display: flex; flex-direction: column; gap: 6mm;
   }
 
-  /* Header */
-  .report-header {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    padding-bottom: 28px;
-    border-bottom: 3px solid var(--ink);
-    margin-bottom: 32px;
+  /* ── HEADER ── */
+  .doc-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    border-bottom: 2.5px solid var(--brown); padding-bottom: 4mm;
   }
-  .report-brand { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-  .report-title { font-size: 2rem; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
-  .report-subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
-  .report-meta { text-align: left; }
-  .report-date { font-size: 0.75rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
-
-  /* Plate */
+  .dh-left .org  { font-size: 7pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .dh-left .title{ font-size: 22pt; font-weight:900; letter-spacing:-.02em; color:var(--brown-dark); line-height:1; }
+  .dh-left .sub  { font-size: 7.5pt; color:var(--muted); margin-top:2px; }
+  .dh-right      { text-align:left; }
+  .dh-right .date{ font-size:7pt; color:var(--muted); margin-bottom:4px; }
   .plate-badge {
-    display: inline-flex; align-items: stretch;
-    border: 2.5px solid var(--ink); border-radius: 8px; overflow: hidden;
-    margin-top: 10px; font-weight: 900;
+    display:inline-flex; align-items:stretch;
+    border:2px solid var(--brown-dark); border-radius:7px; overflow:hidden;
   }
   .plate-flag {
-    background: #003399; color: #fff;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 6px 10px; gap: 2px; font-size: 10px; font-weight: 800;
+    background:#003399; color:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:4px 7px; gap:1px; font-size:7pt; font-weight:800;
   }
-  .plate-flag .emoji { font-size: 14px; }
+  .plate-flag .flag-emoji { font-size:11pt; }
   .plate-num {
-    background: #f5c518; color: #111;
-    display: flex; align-items: center; padding: 8px 20px;
-    font-size: 1.4rem; letter-spacing: 3px; font-family: 'IBM Plex Mono', monospace;
+    background:#f5c518; color:#111;
+    display:flex; align-items:center; padding:5px 14px;
+    font-size:30pt; letter-spacing:10px; font-weight:700;
   }
 
-  /* Hero card */
-  .hero-card {
-    background: var(--paper2); color: var(--ink);
-    border: 1.5px solid var(--line);
-    border-radius: 16px; padding: 28px 32px;
+  /* ── HERO BAND ── */
+  .hero-band {
+    background: var(--brown); color:#fff;
+    border-radius: 10px; padding: 5mm 6mm;
     display: grid; grid-template-columns: 1fr auto;
-    gap: 24px; margin-bottom: 32px;
-    align-items: center;
+    align-items: center; gap: 6mm;
   }
-  .hero-make { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
-  .hero-model { font-size: 2.2rem; font-weight: 900; line-height: 1.1; color: #fff; }
-  .hero-trim { font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
-  .hero-stats { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.25); padding-top: 16px; }
-  .hero-stat { }
-  .hero-stat .hs-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 2px; }
-  .hero-stat .hs-val { font-size: 1rem; font-weight: 700; color: #fff; }
+  .hb-make   { font-size:6.5pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,0.55); margin-bottom:2px; }
+  .hb-model  { font-size:18pt; font-weight:900; line-height:1.1; }
+  .hb-trim   { font-size:7.5pt; color:rgba(255,255,255,0.55); margin-top:2px; }
+  .hb-stats  { display:flex; gap:6mm; margin-top:4mm; padding-top:3mm; border-top:1px solid rgba(255,255,255,0.2); }
+  .stat-lbl  { font-size:5.5pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,0.45); margin-bottom:1px; }
+  .stat-val  { font-size:9pt; font-weight:700; }
 
-  /* Health score */
-  .health-card {
-    position: relative; display: flex; flex-direction: column; align-items: center;
+  .score-wrap { position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; flex-shrink:0; }
+  .score-svg  { width:60px; height:60px; display:block; }
+  .sc-track   { fill:none; stroke:rgba(255,255,255,0.15); stroke-width:6; }
+  .sc-fill    { fill:none; stroke-width:6; stroke-linecap:round; }
+  .score-center {
+    position:absolute; top:0; left:0; width:60px; height:60px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
   }
-  .health-circle { width: 100px; height: 100px; display: block; }
-  .health-circle-track { fill: none; stroke: rgba(255,255,255,0.2); stroke-width: 8; }
-  .health-circle-fill  { fill: none; stroke-width: 8; stroke-linecap: round; }
-  .health-center {
-    position: absolute;
-    top: 0; left: 0; width: 100px; height: 100px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  .sc-num { font-size:13pt; font-weight:900; line-height:1; }
+  .sc-lbl { font-size:5pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,0.4); }
+  .sc-verdict { font-size:6pt; font-weight:600; color:rgba(255,255,255,0.7); text-align:center; max-width:60px; }
+
+  /* ── FLAGS ── */
+  .flags { display:flex; flex-wrap:wrap; gap:4px; }
+  .flag { font-size:6.5pt; font-weight:700; padding:2.5px 9px; border-radius:100px; }
+  .flag-red    { background:#fee2e2; color:var(--red);   border:1px solid #fca5a5; }
+  .flag-green  { background:#dcfce7; color:var(--green); border:1px solid #86efac; }
+  .flag-yellow { background:#fef3c7; color:var(--amber); border:1px solid #fcd34d; }
+
+  /* ── DATA SECTIONS ── */
+  .sections { display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
+  .sec { border:1.5px solid var(--line); border-radius:8px; overflow:hidden; }
+  .sec-full { grid-column:1/-1; }
+  .sec-head {
+    background:var(--paper2); padding:5px 12px;
+    font-size:6.5pt; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--brown-dark); border-bottom:1.5px solid var(--line);
+    display:flex; align-items:center; gap:5px;
   }
-  .health-num { font-size: 1.8rem; font-weight: 900; line-height: 1; }
-  .health-label { font-size: 0.55rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-top: 1px; }
-  .health-verdict { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.8); margin-top: 6px; text-align: center; max-width: 90px; }
+  .sec-head-icon { font-size:9pt; }
+  table.dt { width:100%; border-collapse:collapse; background:#fff; }
+  table.dt tr:not(:last-child) td { border-bottom:1px solid var(--line); }
+  td.l { padding:4.5px 10px; font-size:7pt; color:var(--muted); font-weight:500; width:40%; border-left:1px solid var(--line); white-space:nowrap; }
+  td.v { padding:4.5px 10px; font-size:7.5pt; font-weight:700; color:var(--ink); }
 
-  /* Flags */
-  .flags-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 28px; }
-  .flag { font-size: 0.72rem; font-weight: 700; padding: 4px 12px; border-radius: 100px; }
-  .flag-red    { background: #fee2e2; color: var(--red);   border: 1px solid #fca5a5; }
-  .flag-green  { background: #dcfce7; color: var(--green); border: 1px solid #86efac; }
-  .flag-yellow { background: #fef3c7; color: var(--amber); border: 1px solid #fcd34d; }
-
-  /* Sections grid */
-  .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
-  .section { border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .section-header {
-    background: var(--paper2); border-bottom: 1.5px solid var(--line);
-    padding: 10px 16px; font-size: 0.8rem; font-weight: 700;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    color: #fff; display: flex; align-items: center; gap: 8px;
+  /* ── OWNERSHIP CHIPS ── */
+  .owner-chips { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; background:#fff; }
+  .owner-chip {
+    display:inline-flex; align-items:center; gap:5px;
+    background:var(--paper2); border:1px solid var(--line);
+    border-radius:100px; padding:3px 10px; font-size:7pt; font-weight:700; color:var(--ink);
   }
-  .section-icon { font-size: 1rem; }
-  .data-table { width: 100%; border-collapse: collapse; }
-  .data-table tr:not(:last-child) td { border-bottom: 1px solid var(--line); }
-  .cell-label {
-    padding: 8px 16px; font-size: 0.78rem; color: var(--muted); font-weight: 500;
-    width: 45%; border-left: 1px solid var(--line);
+  .oc-label { font-weight:700; }
+  .oc-val   { color:var(--muted); font-weight:500; }
+  .owner-chip .num {
+    width:15px; height:15px; border-radius:50%;
+    background:var(--brown); color:#fff;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:6pt; font-weight:800; flex-shrink:0;
   }
-  .cell-value { padding: 8px 16px; font-size: 0.85rem; font-weight: 600; color: var(--ink); }
 
-  /* Full-width section */
-  .section-full { grid-column: 1 / -1; }
+  /* ── KM HERO ── */
+  .km-big { padding:7px 12px 4px; display:flex; align-items:baseline; gap:5px; border-bottom:1px solid var(--line); background:#fff; }
+  .km-n { font-size:18pt; font-weight:900; color:var(--gold); font-family:'IBM Plex Mono',monospace; }
+  .km-u { font-size:8pt; color:var(--muted); font-weight:600; }
 
-  /* Recall items */
-  .recall-item {
-    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  .no-recall { padding:8px 12px; color:var(--green); font-size:7.5pt; font-weight:700; background:#fff; }
+  .recall-item { padding:6px 12px; border-bottom:1px solid var(--line); background:#fff; }
+  .rc-type { font-size:7pt; font-weight:700; color:var(--red); margin-bottom:2px; }
+  .rc-desc { font-size:6.5pt; color:var(--muted); line-height:1.4; }
+
+  /* ── FOOTER ── */
+  .doc-footer {
+    border-top:1.5px solid var(--line); padding-top:3mm;
+    display:flex; justify-content:space-between; align-items:center;
+    color:var(--muted); font-size:6.5pt;
   }
-  .recall-item:last-child { border-bottom: none; }
-  .recall-type { font-size: 0.8rem; font-weight: 700; color: var(--red); margin-bottom: 3px; }
-  .recall-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
-  .no-recalls { padding: 14px 16px; color: var(--green); font-size: 0.85rem; font-weight: 600; }
-
-  /* Km hero */
-  .km-hero { padding: 18px 16px 8px; display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); }
-  .km-num { font-size: 2rem; font-weight: 900; color: var(--gold); font-family: 'IBM Plex Mono', monospace; }
-  .km-unit { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
-
-  /* Footer */
-  .report-footer {
-    border-top: 2px solid var(--ink); padding-top: 16px;
-    display: flex; justify-content: space-between; align-items: center;
-    color: var(--muted); font-size: 0.72rem;
-  }
-  .footer-logo { font-weight: 900; color: var(--ink); font-size: 0.85rem; letter-spacing: 0.05em; }
-
-  /* Print styles */
-  @media print {
-    .print-bar { display: none !important; }
-    body { background: white; }
-    .page { padding: 20px; max-width: 100%; }
-    .hero-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .section { break-inside: avoid; }
-  }
+  .df-brand { font-weight:900; color:var(--brown-dark); font-size:7.5pt; }
 </style>
 </head>
 <body>
 
-<div class="print-bar">
-  <span>דוח רכב — ${make} ${model} · ${plate}</span>
-  <button class="print-btn" onclick="window.print()">🖨️ ייצא / הדפס PDF</button>
+<div class="toolbar">
+  <a href="https://perezari.github.io/CarInformation/" class="back-btn">&#8592; חזרה למערכת</a>
+  <button class="print-btn" onclick="window.print()">הדפס / שמור PDF</button>
 </div>
 
-<div class="page">
+<div class="doc">
 
   <!-- Header -->
-  <div class="report-header">
-    <div>
-      <div class="report-brand">מאגר הרכבים הלאומי — ישראל</div>
-      <div class="report-title">דוח בדיקת רכב</div>
-      <div class="report-subtitle">נתונים ממשרד התחבורה · data.gov.il</div>
+  <div class="doc-header">
+    <div class="dh-left">
+      <div class="org">מאגר הרכבים הלאומי — ישראל</div>
+      <div class="title">דוח בדיקת רכב</div>
+      <div class="sub">נתונים ממשרד התחבורה · data.gov.il</div>
     </div>
-    <div class="report-meta">
-      <div class="report-date">הופק: ${today}</div>
+    <div class="dh-right">
       <div class="plate-badge">
-        <div class="plate-flag"><span class="emoji">🇮🇱</span><span>IL</span></div>
+        <div class="plate-flag"><span>IL</span></div>
         <div class="plate-num">${plate}</div>
       </div>
     </div>
   </div>
 
-  <!-- Hero Card -->
-  <div class="hero-card">
+  <!-- Hero band -->
+  <div class="hero-band">
     <div>
-      <div class="hero-make">${make}</div>
-      <div class="hero-model">${model}</div>
-      ${trim && trim !== '—' ? `<div class="hero-trim">${trim}</div>` : ''}
-      <div class="hero-stats">
-        <div class="hero-stat"><div class="hs-label">שנת ייצור</div><div class="hs-val">${year}</div></div>
-        <div class="hero-stat"><div class="hs-label">דלק</div><div class="hs-val">${fuel}</div></div>
-        <div class="hero-stat"><div class="hs-label">צבע</div><div class="hs-val">${carColor}</div></div>
-        <div class="hero-stat"><div class="hs-label">תוקף רישיון</div><div class="hs-val">${license}</div></div>
+      <div class="hb-make">${make}</div>
+      <div class="hb-model">${model}</div>
+      ${trim && trim !== '—' ? `<div class="hb-trim">${trim}</div>` : ''}
+      <div class="hb-stats">
+        <div><div class="stat-lbl">שנת ייצור</div><div class="stat-val">${year}</div></div>
+        <div><div class="stat-lbl">דלק</div><div class="stat-val">${fuel}</div></div>
+        <div><div class="stat-lbl">צבע</div><div class="stat-val">${carColor}</div></div>
+        <div><div class="stat-lbl">תוקף רישיון</div><div class="stat-val">${license}</div></div>
       </div>
     </div>
-    <div class="health-card" style="position:relative;display:flex;flex-direction:column;align-items:center;">
-      <svg class="health-circle" viewBox="0 0 100 100">
-        <circle class="health-circle-track" cx="50" cy="50" r="40" transform="rotate(-90 50 50)"/>
-        <circle class="health-circle-fill" cx="50" cy="50" r="40" transform="rotate(-90 50 50)"
+    <div class="score-wrap">
+      <svg class="score-svg" viewBox="0 0 60 60">
+        <circle class="sc-track" cx="30" cy="30" r="24" transform="rotate(-90 30 30)"/>
+        <circle class="sc-fill" cx="30" cy="30" r="24" transform="rotate(-90 30 30)"
           stroke="${scoreColor}"
-          stroke-dasharray="${circumference}"
-          stroke-dashoffset="${offset}"/>
+          stroke-dasharray="150.8"
+          stroke-dashoffset="${(150.8 - (score/100)*150.8).toFixed(1)}"/>
       </svg>
-      <div class="health-center">
-        <div class="health-num" style="color:${scoreColor}">${healthNum}</div>
-        <div class="health-label">ציון</div>
+      <div class="score-center">
+        <div class="sc-num" style="color:#f2ede4">${healthNum}</div>
       </div>
-      <div class="health-verdict">${healthVerdict}</div>
+      <div class="sc-verdict">${healthVerdict}</div>
     </div>
   </div>
 
   <!-- Flags -->
-  ${flagsHTML ? `<div class="flags-row">${flagsHTML}</div>` : ''}
+  ${flagsHTML ? `<div class="flags">${flagsHTML}</div>` : ''}
 
-  <!-- Data Sections -->
-  <div class="sections-grid">
-    ${sectionsHTML}
+  <!-- 2-column grid -->
+  <div class="sections">
 
-    <!-- Ownership -->
-    ${ownerRows ? `
-    <div class="section">
-      <div class="section-header"><span class="section-icon">👥</span>היסטוריית בעלויות</div>
-      <table class="data-table">${ownerRows}</table>
-    </div>` : ''}
-
-    <!-- Mileage -->
-    <div class="section">
-      <div class="section-header"><span class="section-icon">📊</span>קילומטרז' ומידע היסטורי</div>
-      ${kmHero ? `<div class="km-hero"><span class="km-num">${kmHero}</span><span class="km-unit">ק"מ בטסט אחרון</span></div>` : ''}
-      <table class="data-table">${kmRows}</table>
+    <!-- פרטי רכב -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="22" height="13" rx="2"/><path d="M5 6V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/><circle cx="8" cy="17" r="1.5" fill="currentColor"/><circle cx="16" cy="17" r="1.5" fill="currentColor"/></svg></span> פרטי הרכב</div>
+      <table class="dt">
+        <tr><td class="l">יצרן</td><td class="v">${g('dMake')}</td></tr>
+        <tr><td class="l">דגם</td><td class="v">${g('dModel')}</td></tr>
+        <tr><td class="l">כינוי מסחרי</td><td class="v">${g('dKinuy')}</td></tr>
+        <tr><td class="l">גימור</td><td class="v">${g('dTrim')}</td></tr>
+        <tr><td class="l">דגם מנוע</td><td class="v">${g('dEngine')}</td></tr>
+        <tr><td class="l">סוג דלק</td><td class="v">${g('dFuel')}</td></tr>
+        <tr><td class="l">קב' זיהום</td><td class="v">${g('dPollution')}</td></tr>
+        <tr><td class="l">רמת בטיחות</td><td class="v">${g('dSafety')}</td></tr>
+        <tr><td class="l">צמיג קדמי</td><td class="v">${g('dTireF')}</td></tr>
+        <tr><td class="l">צמיג אחורי</td><td class="v">${g('dTireR')}</td></tr>
+      </table>
     </div>
 
-    <!-- Recalls -->
-    <div class="section section-full">
-      <div class="section-header"><span class="section-icon">⚠️</span>ריקולים שלא בוצעו</div>
-      ${recallItems || '<div class="no-recalls">✅ לא נמצאו ריקולים פתוחים לרכב זה</div>'}
+    <!-- בעלות ורישום -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span> בעלות ורישום</div>
+      <table class="dt">
+        <tr><td class="l">שילדה</td><td class="v" style="font-size:6.5pt">${g('dChassis')}</td></tr>
+        <tr><td class="l">עלייה לכביש</td><td class="v">${g('dFirstReg')}</td></tr>
+        <tr><td class="l">צבע</td><td class="v">${g('dColor')}</td></tr>
+        <tr><td class="l">שנת ייצור</td><td class="v">${g('dYear')}</td></tr>
+        <tr><td class="l">טסט אחרון</td><td class="v">${g('dLastTest')}</td></tr>
+        <tr><td class="l">תוקף רישיון</td><td class="v">${g('dLicense')}</td></tr>
+      </table>
+      <div class="sec-head" style="font-size:6pt; border-top:1.5px solid var(--line); border-bottom:none; margin-top:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> היסטוריית בעלויות</div>
+      <div class="owner-chips">
+        ${[...document.querySelectorAll('#ownershipBody .data-row')].map((row,i)=>{
+          const spans = row.querySelectorAll('span');
+          // spans[0] may contain a number circle + text, strip all leading digits/spaces
+          const rawLabel = spans[0]?.textContent?.trim()||'';
+          const label = rawLabel.replace(/^\d+\s*/,'').replace(/\d/g,'').trim();
+          const val   = spans[1]?.textContent?.trim()||'';
+          return `<div class="owner-chip"><span class="num">${i+1}</span><span class="oc-label">${label}</span></div>`;
+        }).join('')}
+      </div>
     </div>
+
+    <!-- קילומטרז' -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> קילומטרז' ומידע היסטורי</div>
+      <table class="dt">
+        ${kmHero ? `<tr><td class="l">נסועה אחרונה</td><td class="v">${kmHero} ק"מ</td></tr>` : ''}
+        ${kmRows}
+      </table>
+    </div>
+
+    <!-- ריקולים -->
+    <div class="sec">
+      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> ריקולים פתוחים</div>
+      ${recallItems || '<div class="no-recall">&#10003; לא נמצאו ריקולים פתוחים לרכב זה</div>'}
+    </div>
+
   </div>
 
   <!-- Footer -->
-  <div class="report-footer">
-    <div class="footer-logo">🛡 מאגר רכבים ישראל</div>
-    <div>המידע נשלף ממאגרי נתונים ממשלתיים — data.gov.il · המשרד לתחבורה ובטיחות בדרכים</div>
-    <div style="font-family:'IBM Plex Mono',monospace;">${today}</div>
+  <div class="doc-footer">
+    <div class="df-brand">מאגר רכבים ישראל</div>
+    <div>נתונים ממשרד התחבורה ובטיחות בדרכים · data.gov.il</div>
+    <div>${today}</div>
   </div>
 
 </div>
 </body>
 </html>`;
-
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
