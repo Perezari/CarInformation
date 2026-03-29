@@ -349,6 +349,79 @@
   .hf-green  { background: rgba(34,197,94,0.1);   color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
 
 
+  /* ── Timeline ── */
+  .timeline {
+    position: relative;
+    padding: 4px 0;
+    direction: rtl;
+  }
+  .timeline::before {
+    content: ''; position: absolute;
+    right: 27px; top: 0; bottom: 0; width: 2px;
+    background: linear-gradient(to bottom,
+      transparent 0%, var(--accent) 5%,
+      var(--accent) 90%, transparent 100%);
+    opacity: 0.3;
+  }
+
+  .tl-year-group { margin-bottom: 4px; }
+
+  .tl-year-label {
+    font-size: 0.68rem; font-weight: 800;
+    color: var(--text-muted); letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 16px 64px 6px 0;
+    display: block;
+  }
+
+  .tl-event {
+    position: relative;
+    display: flex; align-items: flex-start;
+    gap: 14px; padding: 10px 64px 10px 16px;
+    border-radius: 10px;
+    transition: background 0.15s;
+  }
+  .tl-event:hover { background: rgba(255,255,255,0.03); }
+
+  /* Icon circle */
+  .tl-icon {
+    position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; flex-shrink: 0; z-index: 1;
+    border: 2px solid var(--surface);
+  }
+  .tl-event.ev-birth   .tl-icon { background: #7c3aed; color:#fff; }
+  .tl-event.ev-road    .tl-icon { background: var(--green); color:#fff; }
+  .tl-event.ev-owner   .tl-icon { background: var(--blue); color:#fff; }
+  .tl-event.ev-test    .tl-icon { background: var(--accent); color:#000; }
+  .tl-event.ev-recall  .tl-icon { background: var(--red); color:#fff; }
+  .tl-event.ev-license .tl-icon { background: var(--accent); color:#000; }
+  .tl-event.ev-today   .tl-icon {
+    background: var(--surface); color: #fff;
+    border: 2px solid rgba(255,255,255,0.5);
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+  }
+
+  .tl-content { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .tl-label {
+    font-size: 0.85rem; font-weight: 700; color: var(--text);
+    white-space: nowrap;
+  }
+  .tl-right { display: flex; align-items: center; gap: 8px; }
+  .tl-sub   { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+  .tl-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 100px; }
+  .tl-badge-owner  { background: rgba(59,130,246,0.12); color: var(--blue);   border: 1px solid rgba(59,130,246,0.25); }
+  .tl-badge-recall { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+  .tl-badge-test   { background: rgba(232,168,37,0.12); color: var(--accent); border: 1px solid rgba(232,168,37,0.25); }
+
+  .tl-connector {
+    position: absolute; right: 27px;
+    width: 2px; top: 0; bottom: 0;
+    background: var(--border); z-index: 0;
+  }
+
+  /* ── km-section ── */
   .km-section {
     grid-column: 1 / -1;
     background: var(--surface); border: 1px solid var(--border);
@@ -650,6 +723,16 @@
 
     </div>
 
+    <!-- ציר זמן -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="km-section">
+        <div class="km-header">
+          <div class="km-title"><i class="fa-solid fa-timeline"></i> ציר זמן חיי הרכב</div>
+        </div>
+        <div id="timelineBody"><div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בונה ציר זמן...</div></div>
+      </div>
+    </div>
+
     <!-- קילומטרז' והיסטוריית טסטים -->
     <div class="sections-grid" style="margin-top:16px">
       <div class="km-section">
@@ -887,6 +970,8 @@ async function fetchTestHistory(plate) {
     if (!raw) throw new Error('not found');
     renderVehicleHistory([raw], plate);
     updateHealthFromHistory(raw);
+    // Enrich base car data with km for timeline
+    if (tlData.base) { tlData.base.c = { ...tlData.base.c, kilometer_test_aharon: raw.kilometer_test_aharon }; tryRenderTimeline(); }
   } catch (e) {
     kmBody.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא ניתן לשלוף נתוני נסועה כרגע.</div>`;
   }
@@ -971,6 +1056,7 @@ async function fetchOwnershipHistory(plate) {
     const total = records.length;
     renderOwnershipHistory(records, total, plate);
     updateHealthFromOwnership(total);
+    tlData.owners = records; tryRenderTimeline();
   } catch (e) {
     el.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-users-slash" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא נמצאו נתוני בעלויות.</div>`;
   }
@@ -1037,6 +1123,7 @@ async function fetchRecalls(plate) {
 
     renderRecalls(records);
     updateHealthFromRecalls(records.length);
+    tlData.recalls = records; tryRenderTimeline();
   } catch (e) {
     el.innerHTML = `<div class="km-no-data">לא ניתן לשלוף נתוני ריקול כרגע.</div>`;
     updateHealthFromRecalls(0);
@@ -1274,6 +1361,81 @@ function loadBrandLogo(kinuyEn, tozetNm, engBrand) {
 // ─── Health Score ─────────────────────────────────────────────
 const healthData = { base: null, mileage: null, owners: null, recalls: null, changes: null };
 
+// ─── Timeline data store ──────────────────────────────────────
+const tlData = { base: null, owners: null, recalls: null };
+
+function tryRenderTimeline() {
+  if (!tlData.base) return;
+  const { c } = tlData.base;
+  const events = [];
+  const fmtDt = s => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
+  const fmt     = d => d ? d.toLocaleDateString('he-IL', { month:'2-digit', year:'numeric' }) : null;
+  const fmtFull = d => d ? d.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' }) : null;
+
+  const ICONS = {
+    'ev-birth':   'fa-solid fa-industry',
+    'ev-road':    'fa-solid fa-road',
+    'ev-owner':   'fa-solid fa-user',
+    'ev-test':    'fa-solid fa-wrench',
+    'ev-recall':  'fa-solid fa-triangle-exclamation',
+    'ev-license': 'fa-solid fa-id-card',
+    'ev-today':   'fa-solid fa-location-dot',
+  };
+
+  if (c.shnat_yitzur) events.push({ type:'ev-birth', date: new Date(c.shnat_yitzur, 0), label:'ייצור הרכב', sub: `שנת ${c.shnat_yitzur}` });
+
+  const roadDate = fmtDt(c.moed_aliya_lakvish);
+  if (roadDate) events.push({ type:'ev-road', date: roadDate, label:'עלייה לכביש', sub: fmt(roadDate) });
+
+  if (tlData.owners) {
+    tlData.owners.forEach((r, i) => {
+      const rawDt = String(r.baalut_dt || '');
+      if (rawDt.length >= 6) {
+        const yr = parseInt(rawDt.slice(0,4)), mo = parseInt(rawDt.slice(4,6)) - 1;
+        events.push({ type:'ev-owner', date: new Date(yr, mo), label: r.baalut || 'שינוי בעלות', sub: `${String(mo+1).padStart(2,'0')}/${yr}`, badge: `<span class="tl-badge tl-badge-owner">יד ${i+1}</span>` });
+      }
+    });
+  }
+
+  const testDate = fmtDt(c.mivchan_acharon_dt);
+  if (testDate) {
+    const km = c.kilometer_test_aharon ? Number(c.kilometer_test_aharon).toLocaleString('he-IL') + ' ק"מ' : '';
+    events.push({ type:'ev-test', date: testDate, label:'טסט אחרון', sub: fmt(testDate), badge: km ? `<span class="tl-badge tl-badge-test">${km}</span>` : '' });
+  }
+
+  if (tlData.recalls) {
+    tlData.recalls.forEach(r => {
+      const d = fmtDt(r.TAARICH_PTICHA);
+      if (d) events.push({ type:'ev-recall', date: d, label: r.SUG_TAKALA || 'ריקול פתוח', sub: fmt(d), badge: `<span class="tl-badge tl-badge-recall">#${r.RECALL_ID}</span>` });
+    });
+  }
+
+  const licDate = fmtDt(c.tokef_dt);
+  if (licDate) events.push({ type:'ev-license', date: licDate, label: licDate > new Date() ? 'תוקף רישיון' : 'רישיון פג תוקף', sub: fmt(licDate) });
+
+  events.push({ type:'ev-today', date: new Date(), label:'היום', sub: fmtFull(new Date()) });
+  events.sort((a,b) => a.date - b.date);
+
+  const el = document.getElementById('timelineBody');
+  if (!el) return;
+
+  let lastYear = null;
+  const rows = events.map(ev => {
+    const yr = ev.date.getFullYear();
+    const yearMark = yr !== lastYear ? `<div class="tl-year-label">${yr}</div>` : '';
+    lastYear = yr;
+    return `${yearMark}<div class="tl-event ${ev.type}">
+      <div class="tl-icon"><i class="${ICONS[ev.type]}"></i></div>
+      <div class="tl-content">
+        <span class="tl-label">${ev.label}</span>
+        <div class="tl-right">${ev.badge||''}<span class="tl-sub">${ev.sub||''}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="timeline">${rows}</div>`;
+}
+
 function initHealthScore(c) {
   const now = new Date();
   const year = Number(c.shnat_yitzur) || now.getFullYear();
@@ -1496,7 +1658,11 @@ async function fetchCar() {
     // ── Health score (immediate from base data) ──
     Object.keys(healthData).forEach(k => healthData[k] = null);
     document.getElementById('healthWrap').style.display = 'none';
+    // Reset timeline
+    tlData.base = null; tlData.owners = null; tlData.recalls = null;
+    document.getElementById('timelineBody').innerHTML = '<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בונה ציר זמן...</div>';
     initHealthScore(c);
+    tlData.base = { c }; tryRenderTimeline();
 
     // ── Test history + mileage + ownership + off-road + recalls (async, non-blocking) ──
     fetchTestHistory(raw);
