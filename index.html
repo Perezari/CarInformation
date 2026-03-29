@@ -9,6 +9,7 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root {
     --bg: #0a0c10;
@@ -391,12 +392,12 @@
     font-size: 9px; flex-shrink: 0; z-index: 1;
     border: 2px solid var(--surface);
   }
-  .tl-event.ev-birth   .tl-icon { background: #7c3aed; color:#fff; }
-  .tl-event.ev-road    .tl-icon { background: var(--green); color:#fff; }
-  .tl-event.ev-owner   .tl-icon { background: var(--blue); color:#fff; }
-  .tl-event.ev-test    .tl-icon { background: var(--accent); color:#000; }
-  .tl-event.ev-recall  .tl-icon { background: var(--red); color:#fff; }
-  .tl-event.ev-license .tl-icon { background: var(--accent); color:#000; }
+  .tl-event.ev-birth   .tl-icon { background: var(--accent); color: #000; }
+  .tl-event.ev-road    .tl-icon { background: var(--accent); color: #000; }
+  .tl-event.ev-owner   .tl-icon { background: var(--accent); color: #000; }
+  .tl-event.ev-test    .tl-icon { background: var(--accent); color: #000; }
+  .tl-event.ev-recall  .tl-icon { background: var(--red);    color: #fff; }
+  .tl-event.ev-license .tl-icon { background: var(--accent); color: #000; }
   .tl-event.ev-today   .tl-icon {
     background: var(--surface); color: #fff;
     border: 2px solid rgba(255,255,255,0.5);
@@ -559,7 +560,18 @@
   <!-- Search -->
   <div class="search-wrap">
     <div class="plate-otp-wrap">
-      <div class="plate-otp-boxes" id="plateBoxes"></div>
+      <div style="display:flex; align-items:center; gap:10px; justify-content:center;">
+        <div class="plate-otp-boxes" id="plateBoxes"></div>
+        <button onclick="openCamera()" id="cameraBtn"
+          style="width:42px;height:42px;border-radius:12px;background:var(--surface);border:1.5px solid rgba(232,168,37,0.3);
+          color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+          font-size:14px;flex-shrink:0;transition:all 0.2s;"
+          onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseleave="this.style.borderColor='rgba(232,168,37,0.3)';this.style.color='var(--text-muted)'"
+          title="סרוק לוחית עם מצלמה">
+          <i class="fa-solid fa-camera"></i>
+        </button>
+      </div>
       <input type="text" id="plateInput" class="plate-otp-hidden"
              inputmode="numeric" maxlength="8" autocomplete="off"
              onkeypress="if(event.key==='Enter') fetchCar()"
@@ -578,6 +590,32 @@
     </div>
   </div>
 
+  <!-- OCR Camera Modal -->
+  <div id="cameraModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:1000;
+    flex-direction:column; align-items:center; justify-content:center; gap:16px;">
+    <div style="position:relative; border-radius:16px; overflow:hidden; max-width:480px; width:90%;">
+      <video id="cameraVideo" autoplay playsinline
+        style="width:100%; display:block; border-radius:12px; background:#000;"></video>
+      <!-- Plate frame overlay -->
+      <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+        <div style="width:75%; height:22%; border:3px solid var(--accent); border-radius:8px;
+          box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);"></div>
+      </div>
+    </div>
+    <div id="ocrStatus" style="color:var(--text-muted);font-size:0.85rem;">כוון את הלוחית לתוך המסגרת</div>
+    <div style="display:flex;gap:12px;">
+      <button onclick="captureAndOCR()" style="background:var(--accent);color:#000;border:none;
+        padding:13px 32px;border-radius:12px;font-family:'Heebo',sans-serif;font-size:1rem;font-weight:800;cursor:pointer;">
+        <i class="fa-solid fa-camera"></i> צלם וסרוק
+      </button>
+      <button onclick="closeCamera()" style="background:var(--surface);color:var(--text-muted);border:1px solid var(--border);
+        padding:13px 24px;border-radius:12px;font-family:'Heebo',sans-serif;font-size:1rem;cursor:pointer;">
+        ביטול
+      </button>
+    </div>
+    <canvas id="ocrCanvas" style="display:none;"></canvas>
+  </div>
+
   <input type="hidden" id="stolenRaw" value="">
 
   <!-- Result -->
@@ -588,6 +626,9 @@
     <button class="action-btn" onclick="copyPlate()"><i class="fa-solid fa-copy"></i> העתק לוחית</button>
     <button class="action-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> הדפסה</button>
     <button class="action-btn" onclick="exportPDF()" id="pdfBtn"><i class="fa-solid fa-file-lines"></i> דוח מקצועי</button>
+    <button class="action-btn" onclick="shareWhatsApp()" style="color:#25d366;border-color:rgba(37,211,102,0.3);">
+      <i class="fa-brands fa-whatsapp"></i> שתף
+    </button>
     <button class="action-btn" onclick="openStolenCheck()" style="text-decoration:none">
       <i class="fa-solid fa-shield-halved" style="color:var(--red)"></i> בדוק רכב גנוב
     </button>
@@ -2043,6 +2084,99 @@ function exportPDF() {
   w.document.write(html);
   w.document.close();
 }
+// ─── WhatsApp Share ───────────────────────────────────────────
+function shareWhatsApp() {
+  const g = id => document.getElementById(id)?.textContent?.trim() || '—';
+  const plate    = g('plateTxt');
+  const make     = g('carMake');
+  const model    = g('carModel');
+  const year     = g('qYear');
+  const fuel     = g('qFuel');
+  const carColor = g('qColor');
+  const license  = g('qLicense');
+  const health   = g('healthNum');
+  const verdict  = g('healthVerdict');
+  const km       = document.querySelector('#kmBody [style*="2.2rem"]')?.textContent?.trim() || '';
+  const owners   = document.querySelector('#ownershipBody [style*="2.8rem"]')?.textContent?.trim() || '';
+
+  const lines = [
+    `*דוח רכב — ${plate}*`,
+    `─────────────────`,
+    `יצרן: ${make} ${model} (${year})`,
+    `דלק: ${fuel} | צבע: ${carColor}`,
+    km     ? `נסועה: ${km} ק"מ` : '',
+    owners ? `ידיים: ${owners}` : '',
+    `תוקף רישיון: ${license}`,
+    `─────────────────`,
+    `*ציון בריאות: ${health}/100 — ${verdict}*`,
+    `─────────────────`,
+    `נתונים מ-data.gov.il`,
+  ].filter(Boolean).join('\n');
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank');
+}
+
+// ─── Camera OCR ───────────────────────────────────────────────
+let cameraStream = null;
+
+async function openCamera() {
+  const modal = document.getElementById('cameraModal');
+  const video = document.getElementById('cameraVideo');
+  modal.style.display = 'flex';
+  document.getElementById('ocrStatus').textContent = 'פותח מצלמה...';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = cameraStream;
+    document.getElementById('ocrStatus').textContent = 'כוון את הלוחית לתוך המסגרת הצהובה';
+  } catch(e) {
+    document.getElementById('ocrStatus').textContent = 'לא ניתן לגשת למצלמה: ' + e.message;
+  }
+}
+
+function closeCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  document.getElementById('cameraModal').style.display = 'none';
+  document.getElementById('cameraVideo').srcObject = null;
+}
+
+async function captureAndOCR() {
+  const video  = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('ocrCanvas');
+  const status = document.getElementById('ocrStatus');
+
+  // Crop to the plate frame area (middle 75% width, 22% height)
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const cw = Math.round(vw * 0.75), ch = Math.round(vh * 0.22);
+  const cx = Math.round((vw - cw) / 2),  cy = Math.round((vh - ch) / 2);
+
+  canvas.width = cw; canvas.height = ch;
+  canvas.getContext('2d').drawImage(video, cx, cy, cw, ch, 0, 0, cw, ch);
+
+  status.innerHTML = '<span class="spin"><i class="fa-solid fa-circle-notch"></i></span> מנתח תמונה...';
+
+  try {
+    const worker = await Tesseract.createWorker('eng');
+    await worker.setParameters({ tessedit_char_whitelist: '0123456789' });
+    const { data: { text } } = await worker.recognize(canvas);
+    await worker.terminate();
+
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    if (digits.length >= 7) {
+      closeCamera();
+      document.getElementById('plateInput').value = digits;
+      syncOtpBoxes();
+      status.textContent = '';
+      fetchCar();
+    } else {
+      status.textContent = `זוהו רק ${digits.length} ספרות (${digits}) — נסה שוב עם תאורה טובה יותר`;
+    }
+  } catch(e) {
+    status.textContent = 'שגיאה בזיהוי: ' + e.message;
+  }
+}
+
 // Init
 renderHistory();
 </script>
