@@ -312,7 +312,41 @@
     color: var(--accent); font-size: 14px;
   }
 
-  /* ── Mileage history section ── */
+  /* ── Health Score ── */
+  .health-wrap {
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 18px; padding: 14px 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .health-gauge {
+    position: relative; flex-shrink: 0;
+    width: 72px; height: 72px;
+  }
+  .health-gauge svg { transform: rotate(-90deg); }
+  .health-gauge-track { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 6; }
+  .health-gauge-fill  { fill: none; stroke-width: 6; stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1), stroke 0.5s; }
+  .health-num {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 1.35rem; font-weight: 900; line-height: 1;
+  }
+  .health-num span { font-size: 0.55rem; font-weight: 600; color: var(--text-muted); margin-top: 1px; }
+  .health-info { flex: 1; min-width: 0; }
+  .health-title { font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .health-verdict { font-size: 0.88rem; font-weight: 700; margin-bottom: 6px; }
+  .health-flags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .health-flag {
+    font-size: 0.68rem; font-weight: 600; padding: 2px 8px;
+    border-radius: 100px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .hf-red    { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
+  .hf-yellow { background: rgba(232,168,37,0.12); color: var(--accent);border: 1px solid rgba(232,168,37,0.25); }
+  .hf-green  { background: rgba(34,197,94,0.1);   color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+
+
   .km-section {
     grid-column: 1 / -1;
     background: var(--surface); border: 1px solid var(--border);
@@ -535,6 +569,27 @@
               <div class="value" id="qColor">—</div>
             </div>
           </div>
+
+          <!-- Health Score -->
+          <div class="health-wrap" id="healthWrap" style="display:none;">
+            <div class="health-gauge">
+              <svg width="72" height="72" viewBox="0 0 72 72">
+                <circle class="health-gauge-track" cx="36" cy="36" r="30"/>
+                <circle class="health-gauge-fill" id="healthArc" cx="36" cy="36" r="30"
+                  stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
+              </svg>
+              <div class="health-num">
+                <span id="healthNum">—</span>
+                <span>/100</span>
+              </div>
+            </div>
+            <div class="health-info">
+              <div class="health-title"><i class="fa-solid fa-heart-pulse"></i> ציון בריאות</div>
+              <div class="health-verdict" id="healthVerdict">—</div>
+              <div class="health-flags" id="healthFlags"></div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -828,6 +883,7 @@ async function fetchTestHistory(plate) {
     const raw = d.result?.records?.find(r => String(r.mispar_rechev) === String(plate));
     if (!raw) throw new Error('not found');
     renderVehicleHistory([raw], plate);
+    updateHealthFromHistory(raw);
   } catch (e) {
     kmBody.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-database" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא ניתן לשלוף נתוני נסועה כרגע.</div>`;
   }
@@ -911,6 +967,7 @@ async function fetchOwnershipHistory(plate) {
     if (!records?.length) throw new Error('not found');
     const total = records.length;
     renderOwnershipHistory(records, total, plate);
+    updateHealthFromOwnership(total);
   } catch (e) {
     el.innerHTML = `<div class="km-no-data"><i class="fa-solid fa-users-slash" style="color:var(--text-muted);font-size:1.3rem;display:block;margin-bottom:10px"></i>לא נמצאו נתוני בעלויות.</div>`;
   }
@@ -976,8 +1033,10 @@ async function fetchRecalls(plate) {
     records.sort((a, b) => (b.TAARICH_PTICHA || '').localeCompare(a.TAARICH_PTICHA || ''));
 
     renderRecalls(records);
+    updateHealthFromRecalls(records.length);
   } catch (e) {
     el.innerHTML = `<div class="km-no-data">לא ניתן לשלוף נתוני ריקול כרגע.</div>`;
+    updateHealthFromRecalls(0);
   }
 }
 
@@ -1209,6 +1268,121 @@ function loadBrandLogo(kinuyEn, tozetNm, engBrand) {
   logo.onload = () => { logo.style.display = 'block'; };
 }
 
+// ─── Health Score ─────────────────────────────────────────────
+const healthData = { base: null, mileage: null, owners: null, recalls: null, changes: null };
+
+function initHealthScore(c) {
+  const now = new Date();
+  const year = Number(c.shnat_yitzur) || now.getFullYear();
+  const age  = now.getFullYear() - year;
+
+  let score = 100;
+  const flags = [];
+
+  // Age (-3 per year over 3, max -24)
+  if (age > 3) { const pen = Math.min((age - 3) * 3, 24); score -= pen; }
+  if (age >= 10) flags.push({ cls:'hf-red',    txt:`גיל ${age} שנה` });
+  else if (age >= 6) flags.push({ cls:'hf-yellow', txt:`גיל ${age} שנה` });
+  else flags.push({ cls:'hf-green', txt:`גיל ${age} שנה` });
+
+  // License expired
+  if (c.tokef_dt) {
+    const diff = (new Date(c.tokef_dt) - now) / (1000*60*60*24);
+    if (diff < 0)  { score -= 10; flags.push({ cls:'hf-red',    txt:'רישיון פג תוקף' }); }
+    else if (diff < 60) flags.push({ cls:'hf-yellow', txt:'רישיון פג בקרוב' });
+  }
+
+  healthData.base = { score, flags };
+  renderHealthScore();
+}
+
+function updateHealthFromHistory(r) {
+  if (!r) return;
+  const flags = [];
+  let score = 0;
+
+  // Mileage
+  const km = Number(r.kilometer_test_aharon) || 0;
+  if (km > 0) {
+    if (km > 200000)     { score -= 15; flags.push({ cls:'hf-red',    txt:`${km.toLocaleString('he-IL')} ק"מ` }); }
+    else if (km > 120000){ score -= 7;  flags.push({ cls:'hf-yellow', txt:`${km.toLocaleString('he-IL')} ק"מ` }); }
+    else                 {              flags.push({ cls:'hf-green',  txt:`${km.toLocaleString('he-IL')} ק"מ` }); }
+  }
+
+  // Structure / color / LPG changes
+  if (Number(r.shinui_mivne_ind) === 1) { score -= 15; flags.push({ cls:'hf-red',    txt:'שינוי מבנה' }); }
+  if (Number(r.shnui_zeva_ind)   === 1) { score -= 5;  flags.push({ cls:'hf-yellow', txt:'שינוי צבע' }); }
+  if (Number(r.gapam_ind)        === 1) { score -= 5;  flags.push({ cls:'hf-yellow', txt:'גפ"מ' }); }
+
+  healthData.changes = { score, flags };
+  renderHealthScore();
+}
+
+function updateHealthFromOwnership(count) {
+  const flags = [];
+  let score = 0;
+  if (count === 1)     flags.push({ cls:'hf-green',  txt:'יד ראשונה' });
+  else if (count === 2){ score -= 5;  flags.push({ cls:'hf-green',  txt:`${count} ידיים` }); }
+  else if (count <= 4) { score -= 12; flags.push({ cls:'hf-yellow', txt:`${count} ידיים` }); }
+  else                 { score -= 20; flags.push({ cls:'hf-red',    txt:`${count} ידיים` }); }
+  healthData.owners = { score, flags };
+  renderHealthScore();
+}
+
+function updateHealthFromRecalls(count) {
+  const flags = [];
+  let score = 0;
+  if (count === 0) flags.push({ cls:'hf-green', txt:'אין ריקולים פתוחים' });
+  else { score -= Math.min(count * 10, 20); flags.push({ cls:'hf-red', txt:`${count} ריקולים פתוחים` }); }
+  healthData.recalls = { score, flags };
+  renderHealthScore();
+}
+
+function renderHealthScore() {
+  if (!healthData.base) return;
+
+  let total = healthData.base.score
+    + (healthData.changes?.score  || 0)
+    + (healthData.owners?.score   || 0)
+    + (healthData.recalls?.score  || 0);
+  total = Math.max(0, Math.min(100, total));
+
+  const allFlags = [
+    ...(healthData.base.flags    || []),
+    ...(healthData.changes?.flags || []),
+    ...(healthData.owners?.flags  || []),
+    ...(healthData.recalls?.flags || []),
+  ];
+
+  // Color
+  const color = total >= 75 ? '#22c55e' : total >= 50 ? '#e8a825' : '#ef4444';
+
+  // Verdict
+  const verdict = total >= 80 ? '✅ מצב מצוין'
+                : total >= 65 ? '👍 מצב טוב'
+                : total >= 50 ? '⚠️ מצב סביר'
+                : total >= 35 ? '🔶 מצב ירוד'
+                : '🔴 מצב גרוע';
+
+  // SVG arc
+  const circumference = 188.5;
+  const offset = circumference - (total / 100) * circumference;
+  const arc = document.getElementById('healthArc');
+  if (arc) { arc.style.strokeDashoffset = offset; arc.style.stroke = color; }
+
+  const numEl = document.getElementById('healthNum');
+  if (numEl) { numEl.textContent = total; numEl.style.color = color; }
+
+  const verdictEl = document.getElementById('healthVerdict');
+  if (verdictEl) { verdictEl.textContent = verdict; verdictEl.style.color = color; }
+
+  const flagsEl = document.getElementById('healthFlags');
+  if (flagsEl) flagsEl.innerHTML = allFlags.map(f =>
+    `<span class="health-flag ${f.cls}">${f.txt}</span>`).join('');
+
+  document.getElementById('healthWrap').style.display = 'flex';
+}
+
 // ─── Main fetch ───────────────────────────────────────────────
 async function fetchCar() {
   const raw = document.getElementById('plateInput').value.trim().replace(/-/g,'');
@@ -1315,6 +1489,11 @@ async function fetchCar() {
     document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
     document.getElementById('ownershipLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_2?skip=0&mispar_rechev=${raw}`;
     document.getElementById('stolenRaw').value = raw;
+
+    // ── Health score (immediate from base data) ──
+    Object.keys(healthData).forEach(k => healthData[k] = null);
+    document.getElementById('healthWrap').style.display = 'none';
+    initHealthScore(c);
 
     // ── Test history + mileage + ownership + off-road + recalls (async, non-blocking) ──
     fetchTestHistory(raw);
