@@ -1828,9 +1828,10 @@ function exportPDF() {
   @page { size: A4 portrait; margin: 0; }
 
   body {
-    font-family: 'Heebo', sans-serif; background: #fff;
+    font-family: 'Heebo', sans-serif;
+    background: #f1f5f9;
     color: var(--ink); direction: rtl;
-    width: 210mm; min-height: 297mm;
+    padding: 0 0 60px;
   }
 
   /* ── SCREEN TOOLBAR ── */
@@ -1851,10 +1852,20 @@ function exportPDF() {
     padding:8px 22px; border-radius:6px;
     font-family:'Heebo',sans-serif; font-size:0.85rem; font-weight:700; cursor:pointer;
   }
-  @media print { .toolbar { display:none !important; } }
+  @media print {
+    .toolbar { display:none !important; }
+    body { background:#fff; padding:0; }
+    .doc { box-shadow:none; border-radius:0; padding:14mm 14mm 10mm; margin:0; max-width:none; }
+    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
 
   /* ── PAGE WRAPPER ── */
   .doc {
+    max-width: 820px;
+    margin: 24px auto 0;
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.10);
     padding: 14mm 14mm 10mm;
     display: flex; flex-direction: column; gap: 6mm;
   }
