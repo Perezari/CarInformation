@@ -1,0 +1,78 @@
+{
+  "name": "מאגר רכבים ישראל",
+  "short_name": "מאגר רכבים",
+  "description": "בדיקת פרטי רכב ממאגרי data.gov.il — היסטוריית בעלויות, תקלות, בדיקות רישוי וקריאות שירות",
+  "lang": "he",
+  "dir": "rtl",
+
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "il.gov.car-lookup",
+
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+
+  "categories": ["productivity", "utilities", "lifestyle"],
+
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "חיפוש רכב חדש",
+      "short_name": "חיפוש",
+      "description": "התחל בדיקת רכב חדשה",
+      "url": "./index.html?action=new",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "סריקת לוחית במצלמה",
+      "short_name": "סריקה",
+      "description": "פתח את המצלמה לזיהוי אוטומטי של מספר הרכב",
+      "url": "./index.html?action=scan",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+
+  "prefer_related_applications": false
+}

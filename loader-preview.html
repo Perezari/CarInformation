@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מאגר רכבים — Loader Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --border: rgba(255,255,255,0.07);
+    --accent: #e8a825;
+    --accent-2: #f0c040;
+    --text: #f0f2f5;
+    --text-dim: #9ca3af;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Heebo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  /* Background grid + glow (matches main app aesthetic) */
+  .bg-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .bg-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 60% 40% at 50% 20%, rgba(232,168,37,0.10) 0%, transparent 70%);
+  }
+
+  /* Demo controls */
+  .demo-wrap {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 24px;
+  }
+  .controls {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font: 600 0.85rem 'Heebo', sans-serif;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232,168,37,0.06);
+  }
+  .label {
+    color: var(--text-dim); font-size: 0.78rem;
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+
+  /* ============================================================
+     CAR-LOADER OVERLAY  (drop-in replacement for #pdf-loader)
+     ============================================================ */
+  #car-loader {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(10,12,16,0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 22px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  #car-loader.active { display: flex; opacity: 1; }
+
+  .car-loader-svg {
+    width: 200px;
+    height: 130px;
+    overflow: visible;
+    filter: drop-shadow(0 0 14px rgba(232,168,37,0.25));
+  }
+
+  .car-loader-text {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.04em;
+    font-family: 'Heebo', sans-serif;
+  }
+  .car-loader-bar {
+    width: 180px; height: 2px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .car-loader-bar::after {
+    content: '';
+    position: absolute; inset: 0;
+    width: 30%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: barSlide 1.6s ease-in-out infinite;
+  }
+  @keyframes barSlide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(420%); }
+  }
+
+  /* ── Stroke-draw choreography ──
+     Each path/circle/line uses pathLength="100" so dasharray:100 covers the
+     full length regardless of geometry. The full sequence is ~1.6s, then it
+     loops indefinitely so the loader stays "alive" while waiting. */
+  .car-loader-svg [data-draw] {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: carDraw 2.6s cubic-bezier(0.65,0.05,0.36,1) infinite;
+  }
+  @keyframes carDraw {
+    0%        { stroke-dashoffset: 100; }
+    /* Draw phase */
+    35%, 70%  { stroke-dashoffset: 0; }
+    /* Hold drawn briefly, then erase backwards for a clean loop */
+    85%       { stroke-dashoffset: -100; }
+    100%      { stroke-dashoffset: -100; }
+  }
+
+  /* Stagger each piece so the car assembles like an engineering blueprint */
+  .car-loader-svg .l-body    { animation-delay: 0.00s; }
+  .car-loader-svg .l-window  { animation-delay: 0.30s; }
+  .car-loader-svg .l-pillar  { animation-delay: 0.40s; }
+  .car-loader-svg .l-door    { animation-delay: 0.50s; }
+  .car-loader-svg .l-skirt   { animation-delay: 0.55s; }
+  .car-loader-svg .l-grille  { animation-delay: 0.45s; }
+  .car-loader-svg .l-wheel-f { animation-delay: 0.60s; }
+  .car-loader-svg .l-wheel-r { animation-delay: 0.65s; }
+  .car-loader-svg .l-rim-f   { animation-delay: 0.85s; }
+  .car-loader-svg .l-rim-r   { animation-delay: 0.90s; }
+  .car-loader-svg .l-spoke   { animation-delay: 1.00s; }
+
+  /* Headlight + taillight bloom-in once stroke is laid down */
+  .car-loader-svg .l-light {
+    opacity: 0;
+    animation: lightOn 2.6s ease-in-out infinite;
+  }
+  @keyframes lightOn {
+    0%, 30%   { opacity: 0; }
+    45%, 70%  { opacity: 1; }
+    85%, 100% { opacity: 0; }
+  }
+  .car-loader-svg .l-light-fr  { animation-delay: 0.70s; }
+  .car-loader-svg .l-light-rear{ animation-delay: 0.75s; }
+
+  /* Tasteful road dashes drifting under the car for a sense of motion */
+  .car-loader-svg .l-road {
+    stroke: rgba(232,168,37,0.35);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 6 14;
+    animation: roadDrift 0.9s linear infinite;
+  }
+  @keyframes roadDrift {
+    from { stroke-dashoffset: 0;   }
+    to   { stroke-dashoffset: -20; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<div class="demo-wrap">
+  <div class="label">Logo + Loader Preview</div>
+
+  <!-- Static logo preview (no animation) -->
+  <svg width="220" height="220" viewBox="0 0 512 512">
+    <defs>
+      <linearGradient id="goldGrad-static" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#f5c95a"/>
+        <stop offset="50%" stop-color="#e8a825"/>
+        <stop offset="100%" stop-color="#b87a0c"/>
+      </linearGradient>
+      <radialGradient id="bgGlow-static" cx="50%" cy="58%" r="55%">
+        <stop offset="0%" stop-color="#e8a825" stop-opacity="0.18"/>
+        <stop offset="55%" stop-color="#e8a825" stop-opacity="0.04"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="hl-static" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#fff4cc"/>
+        <stop offset="55%" stop-color="#f0c040" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="tl-static" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffb84a"/>
+        <stop offset="60%" stop-color="#e8a825" stop-opacity="0.55"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="512" height="512" rx="112" fill="#0a0c10"/>
+    <rect width="512" height="512" rx="112" fill="url(#bgGlow-static)"/>
+    <line x1="48" y1="404" x2="464" y2="404"
+          stroke="#e8a825" stroke-opacity="0.20" stroke-width="2.5" stroke-linecap="round"
+          stroke-dasharray="6 12"/>
+    <g stroke="url(#goldGrad-static)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 50 360 L 42 340 C 38 322,50 308,70 304 L 92 302 C 110 290,134 282,162 276 L 198 270 C 224 250,258 238,296 240 L 332 248 C 360 256,380 268,392 282 L 432 296 C 450 302,460 312,460 326 L 458 342 L 444 358 L 426 364 L 414 364 C 412 344,396 330,374 330 C 352 330,336 344,334 364 L 188 364 C 186 344,170 330,148 330 C 126 330,110 344,108 364 Z" stroke-width="6.5"/>
+      <path d="M 204 270 C 226 254,256 246,288 248 L 322 254 C 346 260,364 270,378 282" stroke-width="3.2"/>
+      <line x1="296" y1="248" x2="296" y2="278" stroke-width="2.4"/>
+      <path d="M 198 322 L 388 322" stroke-width="2" stroke-opacity="0.55"/>
+      <path d="M 116 358 L 386 358" stroke-width="1.8" stroke-opacity="0.30"/>
+      <path d="M 48 326 L 76 324" stroke-width="2.4"/>
+      <circle cx="148" cy="364" r="36" stroke-width="6.5"/>
+      <circle cx="374" cy="364" r="36" stroke-width="6.5"/>
+      <circle cx="148" cy="364" r="13" stroke-width="3"/>
+      <circle cx="374" cy="364" r="13" stroke-width="3"/>
+      <g stroke-width="1.6" stroke-opacity="0.6">
+        <line x1="135" y1="364" x2="161" y2="364"/>
+        <line x1="148" y1="351" x2="148" y2="377"/>
+        <line x1="361" y1="364" x2="387" y2="364"/>
+        <line x1="374" y1="351" x2="374" y2="377"/>
+      </g>
+    </g>
+    <circle cx="54" cy="316" r="14" fill="url(#hl-static)"/>
+    <circle cx="54" cy="316" r="3.5" fill="#fff4cc"/>
+    <circle cx="450" cy="320" r="11" fill="url(#tl-static)"/>
+    <circle cx="450" cy="320" r="2.5" fill="#ffb84a"/>
+  </svg>
+
+  <div class="controls">
+    <button class="btn" onclick="show('מייצר דוח PDF...')">הצג Loader (PDF)</button>
+    <button class="btn" onclick="show('טוען נתוני רכב...')">הצג Loader (חיפוש)</button>
+    <button class="btn" onclick="show('סורק לוחית רישוי...')">הצג Loader (מצלמה)</button>
+  </div>
+  <div class="label" style="opacity:.6">לחץ ברקע כדי לסגור</div>
+</div>
+
+<!-- ============================================================
+     THE LOADER  (this is what you'll paste into your index.html)
+     ============================================================ -->
+<div id="car-loader" onclick="hide()">
+  <svg class="car-loader-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="ld-gold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"  stop-color="#f5c95a"/>
+        <stop offset="50%" stop-color="#e8a825"/>
+        <stop offset="100%" stop-color="#b87a0c"/>
+      </linearGradient>
+      <radialGradient id="ld-hl" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#fff4cc"/>
+        <stop offset="55%" stop-color="#f0c040" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="ld-tl" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#ffb84a"/>
+        <stop offset="60%" stop-color="#e8a825" stop-opacity="0.55"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Drifting road dashes -->
+    <line class="l-road" x1="48" y1="404" x2="464" y2="404"/>
+
+    <g stroke="url(#ld-gold)" fill="none"
+       stroke-linecap="round" stroke-linejoin="round">
+      <!-- Body -->
+      <path data-draw class="l-body" pathLength="100" stroke-width="6.5" d="
+        M 50 360 L 42 340
+        C 38 322, 50 308, 70 304
+        L 92 302 C 110 290, 134 282, 162 276
+        L 198 270 C 224 250, 258 238, 296 240
+        L 332 248 C 360 256, 380 268, 392 282
+        L 432 296 C 450 302, 460 312, 460 326
+        L 458 342 L 444 358 L 426 364 L 414 364
+        C 412 344, 396 330, 374 330
+        C 352 330, 336 344, 334 364
+        L 188 364
+        C 186 344, 170 330, 148 330
+        C 126 330, 110 344, 108 364 Z
+      "/>
+      <!-- Greenhouse -->
+      <path data-draw class="l-window" pathLength="100" stroke-width="3.2" d="
+        M 204 270 C 226 254, 256 246, 288 248
+        L 322 254 C 346 260, 364 270, 378 282
+      "/>
+      <!-- B-pillar -->
+      <line data-draw class="l-pillar" pathLength="100" stroke-width="2.4"
+            x1="296" y1="248" x2="296" y2="278"/>
+      <!-- Door line -->
+      <path data-draw class="l-door" pathLength="100" stroke-width="2"
+            stroke-opacity="0.55" d="M 198 322 L 388 322"/>
+      <!-- Side skirt -->
+      <path data-draw class="l-skirt" pathLength="100" stroke-width="1.8"
+            stroke-opacity="0.30" d="M 116 358 L 386 358"/>
+      <!-- Grille -->
+      <path data-draw class="l-grille" pathLength="100" stroke-width="2.4"
+            d="M 48 326 L 76 324"/>
+      <!-- Wheels -->
+      <circle data-draw class="l-wheel-f" pathLength="100" stroke-width="6.5"
+              cx="148" cy="364" r="36"/>
+      <circle data-draw class="l-wheel-r" pathLength="100" stroke-width="6.5"
+              cx="374" cy="364" r="36"/>
+      <!-- Rims -->
+      <circle data-draw class="l-rim-f" pathLength="100" stroke-width="3"
+              cx="148" cy="364" r="13"/>
+      <circle data-draw class="l-rim-r" pathLength="100" stroke-width="3"
+              cx="374" cy="364" r="13"/>
+      <!-- Spokes -->
+      <g stroke-width="1.6" stroke-opacity="0.6">
+        <line data-draw class="l-spoke" pathLength="100" x1="135" y1="364" x2="161" y2="364"/>
+        <line data-draw class="l-spoke" pathLength="100" x1="148" y1="351" x2="148" y2="377"/>
+        <line data-draw class="l-spoke" pathLength="100" x1="361" y1="364" x2="387" y2="364"/>
+        <line data-draw class="l-spoke" pathLength="100" x1="374" y1="351" x2="374" y2="377"/>
+      </g>
+    </g>
+
+    <!-- Headlight bloom -->
+    <g class="l-light l-light-fr">
+      <circle cx="54" cy="316" r="14" fill="url(#ld-hl)"/>
+      <circle cx="54" cy="316" r="3.5" fill="#fff4cc"/>
+    </g>
+    <!-- Taillight bloom -->
+    <g class="l-light l-light-rear">
+      <circle cx="450" cy="320" r="11" fill="url(#ld-tl)"/>
+      <circle cx="450" cy="320" r="2.5" fill="#ffb84a"/>
+    </g>
+  </svg>
+
+  <div class="car-loader-text" id="car-loader-text">טוען...</div>
+  <div class="car-loader-bar"></div>
+</div>
+
+<script>
+  const loader = document.getElementById('car-loader');
+  const txt    = document.getElementById('car-loader-text');
+  function show(label) {
+    txt.textContent = label;
+    loader.classList.add('active');
+  }
+  function hide() { loader.classList.remove('active'); }
+</script>
+</body>
+</html>

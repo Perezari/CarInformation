@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מאגר רכבים ישראל</title>
+
+<!-- ── PWA / Icons ── -->
+<meta name="theme-color" content="#0a0c10">
+<meta name="description" content="בדיקת פרטי רכב ממאגרי data.gov.il — היסטוריית בעלויות, תקלות, בדיקות רישוי וקריאות שירות">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="מאגר רכבים">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
@@ -152,28 +165,96 @@
   .spin { animation: spin 0.8s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── PDF LOADER OVERLAY ── */
+  /* ── CAR LOADER OVERLAY ── */
   #pdf-loader {
     position: fixed; inset: 0; z-index: 9999;
-    background: rgba(10,12,16,0.85);
-    backdrop-filter: blur(6px);
+    background: rgba(10,12,16,0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: none;
     flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 18px;
+    gap: 22px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
   }
-  #pdf-loader.active { display: flex; }
-  .pdf-loader-ring {
-    width: 52px; height: 52px;
-    border: 3px solid rgba(255,255,255,0.1);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+  #pdf-loader.active { display: flex; opacity: 1; }
+
+  .car-loader-svg {
+    width: 200px;
+    height: 130px;
+    overflow: visible;
+    filter: drop-shadow(0 0 14px rgba(232,168,37,0.25));
   }
   #pdf-loader-text {
-    font-size: 0.9rem; font-weight: 600;
+    font-size: 0.92rem;
+    font-weight: 600;
     color: rgba(255,255,255,0.85);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.04em;
+    font-family: 'Heebo', sans-serif;
+  }
+  .car-loader-bar {
+    width: 180px; height: 2px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .car-loader-bar::after {
+    content: '';
+    position: absolute; inset: 0;
+    width: 30%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: carBarSlide 1.6s ease-in-out infinite;
+  }
+  @keyframes carBarSlide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(420%); }
+  }
+  /* Stroke-draw choreography — full cycle 2.6s, loops indefinitely */
+  .car-loader-svg [data-draw] {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: carDraw 2.6s cubic-bezier(0.65,0.05,0.36,1) infinite;
+  }
+  @keyframes carDraw {
+    0%        { stroke-dashoffset: 100; }
+    35%, 70%  { stroke-dashoffset: 0; }
+    85%       { stroke-dashoffset: -100; }
+    100%      { stroke-dashoffset: -100; }
+  }
+  .car-loader-svg .l-body    { animation-delay: 0.00s; }
+  .car-loader-svg .l-window  { animation-delay: 0.30s; }
+  .car-loader-svg .l-pillar  { animation-delay: 0.40s; }
+  .car-loader-svg .l-door    { animation-delay: 0.50s; }
+  .car-loader-svg .l-skirt   { animation-delay: 0.55s; }
+  .car-loader-svg .l-grille  { animation-delay: 0.45s; }
+  .car-loader-svg .l-wheel-f { animation-delay: 0.60s; }
+  .car-loader-svg .l-wheel-r { animation-delay: 0.65s; }
+  .car-loader-svg .l-rim-f   { animation-delay: 0.85s; }
+  .car-loader-svg .l-rim-r   { animation-delay: 0.90s; }
+  .car-loader-svg .l-spoke   { animation-delay: 1.00s; }
+  .car-loader-svg .l-light {
+    opacity: 0;
+    animation: carLightOn 2.6s ease-in-out infinite;
+  }
+  @keyframes carLightOn {
+    0%, 30%   { opacity: 0; }
+    45%, 70%  { opacity: 1; }
+    85%, 100% { opacity: 0; }
+  }
+  .car-loader-svg .l-light-fr   { animation-delay: 0.70s; }
+  .car-loader-svg .l-light-rear { animation-delay: 0.75s; }
+  .car-loader-svg .l-road {
+    stroke: rgba(232,168,37,0.35);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 6 14;
+    animation: carRoadDrift 0.9s linear infinite;
+  }
+  @keyframes carRoadDrift {
+    from { stroke-dashoffset: 0;   }
+    to   { stroke-dashoffset: -20; }
   }
 
   /* ── Result Card ── */
@@ -568,8 +649,94 @@
 </head>
 <body>
 <div id="pdf-loader">
-  <div class="pdf-loader-ring"></div>
+  <svg class="car-loader-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="ld-gold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"  stop-color="#f5c95a"/>
+        <stop offset="50%" stop-color="#e8a825"/>
+        <stop offset="100%" stop-color="#b87a0c"/>
+      </linearGradient>
+      <radialGradient id="ld-hl" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#fff4cc"/>
+        <stop offset="55%" stop-color="#f0c040" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="ld-tl" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#ffb84a"/>
+        <stop offset="60%" stop-color="#e8a825" stop-opacity="0.55"/>
+        <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Drifting road dashes -->
+    <line class="l-road" x1="48" y1="404" x2="464" y2="404"/>
+
+    <g stroke="url(#ld-gold)" fill="none"
+       stroke-linecap="round" stroke-linejoin="round">
+      <!-- Body -->
+      <path data-draw="" class="l-body" pathLength="100" stroke-width="6.5" d="
+        M 50 360 L 42 340
+        C 38 322, 50 308, 70 304
+        L 92 302 C 110 290, 134 282, 162 276
+        L 198 270 C 224 250, 258 238, 296 240
+        L 332 248 C 360 256, 380 268, 392 282
+        L 432 296 C 450 302, 460 312, 460 326
+        L 458 342 L 444 358 L 426 364 L 414 364
+        C 412 344, 396 330, 374 330
+        C 352 330, 336 344, 334 364
+        L 188 364
+        C 186 344, 170 330, 148 330
+        C 126 330, 110 344, 108 364 Z
+      "/>
+      <!-- Greenhouse -->
+      <path data-draw="" class="l-window" pathLength="100" stroke-width="3.2" d="
+        M 204 270 C 226 254, 256 246, 288 248
+        L 322 254 C 346 260, 364 270, 378 282
+      "/>
+      <!-- B-pillar -->
+      <line data-draw="" class="l-pillar" pathLength="100" stroke-width="2.4"
+            x1="296" y1="248" x2="296" y2="278"/>
+      <!-- Door line -->
+      <path data-draw="" class="l-door" pathLength="100" stroke-width="2"
+            stroke-opacity="0.55" d="M 198 322 L 388 322"/>
+      <!-- Side skirt -->
+      <path data-draw="" class="l-skirt" pathLength="100" stroke-width="1.8"
+            stroke-opacity="0.30" d="M 116 358 L 386 358"/>
+      <!-- Grille -->
+      <path data-draw="" class="l-grille" pathLength="100" stroke-width="2.4"
+            d="M 48 326 L 76 324"/>
+      <!-- Wheels -->
+      <circle data-draw="" class="l-wheel-f" pathLength="100" stroke-width="6.5"
+              cx="148" cy="364" r="36"/>
+      <circle data-draw="" class="l-wheel-r" pathLength="100" stroke-width="6.5"
+              cx="374" cy="364" r="36"/>
+      <!-- Rims -->
+      <circle data-draw="" class="l-rim-f" pathLength="100" stroke-width="3"
+              cx="148" cy="364" r="13"/>
+      <circle data-draw="" class="l-rim-r" pathLength="100" stroke-width="3"
+              cx="374" cy="364" r="13"/>
+      <!-- Spokes -->
+      <g stroke-width="1.6" stroke-opacity="0.6">
+        <line data-draw="" class="l-spoke" pathLength="100" x1="135" y1="364" x2="161" y2="364"/>
+        <line data-draw="" class="l-spoke" pathLength="100" x1="148" y1="351" x2="148" y2="377"/>
+        <line data-draw="" class="l-spoke" pathLength="100" x1="361" y1="364" x2="387" y2="364"/>
+        <line data-draw="" class="l-spoke" pathLength="100" x1="374" y1="351" x2="374" y2="377"/>
+      </g>
+    </g>
+
+    <!-- Headlight bloom -->
+    <g class="l-light l-light-fr">
+      <circle cx="54" cy="316" r="14" fill="url(#ld-hl)"/>
+      <circle cx="54" cy="316" r="3.5" fill="#fff4cc"/>
+    </g>
+    <!-- Taillight bloom -->
+    <g class="l-light l-light-rear">
+      <circle cx="450" cy="320" r="11" fill="url(#ld-tl)"/>
+      <circle cx="450" cy="320" r="2.5" fill="#ffb84a"/>
+    </g>
+  </svg>
   <div id="pdf-loader-text">מייצר דוח PDF...</div>
+  <div class="car-loader-bar"></div>
 </div>
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
