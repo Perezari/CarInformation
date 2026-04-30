@@ -1,18 +1,18 @@
-// ─── Recent searches (sessionStorage) ───────────────────────
+// ─── Recent searches (localStorage) ──────────────────────────
 const HISTORY_KEY = 'car_search_history';
 function getHistory() {
-  try { return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
 }
 function addToHistory(plate, label, logoUrl) {
   let h = getHistory().filter(x => x.plate !== plate);
   h.unshift({ plate, label, logo: logoUrl || '' });
   if (h.length > 5) h = h.slice(0,5);
-  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   renderHistory();
 }
 function removeFromHistory(plate) {
   const h = getHistory().filter(x => x.plate !== plate);
-  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   renderHistory();
 }
 function renderHistory() {
