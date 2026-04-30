@@ -901,14 +901,27 @@
     .cmp-row-label { width: 80px; }
     .cmp-col-head { min-width: 110px; }
 
-    /* Compare modal goes fullscreen on mobile */
+    /* Compare modal goes fullscreen on mobile, respecting safe-area insets */
     .modal-overlay { padding: 0; }
     .modal-card {
       max-width: 100%; width: 100%;
       max-height: 100vh; height: 100vh;
       border-radius: 0; border: none;
     }
-    .modal-body { padding: 16px; }
+    .modal-header {
+      padding:
+        calc(env(safe-area-inset-top, 0px) + 18px)
+        calc(env(safe-area-inset-right, 0px) + 22px)
+        18px
+        calc(env(safe-area-inset-left, 0px) + 22px);
+    }
+    .modal-body {
+      padding:
+        16px
+        calc(env(safe-area-inset-right, 0px) + 16px)
+        calc(env(safe-area-inset-bottom, 0px) + 16px)
+        calc(env(safe-area-inset-left, 0px) + 16px);
+    }
     .compare-table-wrap { margin: 0 -16px 16px; padding: 0 16px; }
   }
 
