@@ -1196,27 +1196,32 @@ async function fetchEmissionFilter(plate) {
   } catch (_) {}
 }
 
-// ─── Per-plate extras (3 datasets fetched in parallel) ──────
+// ─── Per-plate extras (4 datasets fetched in parallel) ──────
 // 0866573c: private + commercial → grira_nm + tire codes
 // 83bfb278: vehicles eligible for license-fee discount (advanced safety)
 // 786b33b5: commercial >3.5t required to install cargo anchor points
+// c8b9f9c8: vehicles authorized to carry a disabled-parking tag
 const CKAN_VEHICLE_EXTRAS  = '0866573c-40cd-4ca8-91d2-9dd2d7a492e5';
 const CKAN_SAFETY_DISCOUNT = '83bfb278-7be1-4dab-ae2d-40125a923da1';
 const CKAN_ANCHOR_POINTS   = '786b33b5-75c4-42a3-a241-b1af3c9ca487';
+const CKAN_DISABLED_TAG    = 'c8b9f9c8-4612-4068-934f-d4acd2e3c06e';
 
 async function fetchVehicleExtras(plate) {
   const wrap = document.getElementById('vehicleExtraRows');
   if (wrap) wrap.innerHTML = '';
   if (!plate) return;
 
-  const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
-  const baseUrl = id => `https://data.gov.il/api/3/action/datastore_search?resource_id=${id}&filters=${filters}&limit=1`;
+  const filters         = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+  const filtersDisabled = encodeURIComponent(JSON.stringify({ 'MISPAR RECHEV': Number(plate) })); // field has a space
+  const baseUrl     = id => `https://data.gov.il/api/3/action/datastore_search?resource_id=${id}&filters=${filters}&limit=1`;
+  const disabledUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_DISABLED_TAG}&filters=${filtersDisabled}&limit=1`;
 
   try {
-    const [extrasRes, discountRes, anchorRes] = await Promise.allSettled([
+    const [extrasRes, discountRes, anchorRes, disabledRes] = await Promise.allSettled([
       fetch(baseUrl(CKAN_VEHICLE_EXTRAS)).then(r => r.json()),
       fetch(baseUrl(CKAN_SAFETY_DISCOUNT)).then(r => r.json()),
       fetch(baseUrl(CKAN_ANCHOR_POINTS)).then(r => r.json()),
+      fetch(disabledUrl).then(r => r.json()),
     ]);
 
     const rows = [];
@@ -1257,6 +1262,23 @@ async function fetchVehicleExtras(plate) {
           'נקודות עיגון לאבטחת מטענים',
           `<span style="color:var(--accent); font-weight:800; display:inline-flex; align-items:center; gap:6px;">
              <i class="fa-solid fa-anchor"></i> חובה (תקנות תעבורה תיקון 8)
+           </span>`
+        ]);
+      }
+    }
+
+    // Disabled-parking tag — vehicle authorized to carry the tag
+    if (disabledRes.status === 'fulfilled' && disabledRes.value?.success) {
+      const r = disabledRes.value.result?.records?.[0];
+      if (r) {
+        const issue = r['TAARICH HAFAKAT TAG'];
+        const issueFmt = (issue && /^\d{8}$/.test(String(issue)))
+          ? `${String(issue).slice(6,8)}.${String(issue).slice(4,6)}.${String(issue).slice(0,4)}`
+          : null;
+        rows.push([
+          'תג חניה לנכה',
+          `<span style="color:var(--blue); font-weight:800; display:inline-flex; align-items:center; gap:6px;">
+             <i class="fa-solid fa-wheelchair"></i> מורשה${issueFmt ? ` · הופק ${issueFmt}` : ''}
            </span>`
         ]);
       }
@@ -1369,6 +1391,45 @@ async function fetchConstructionEquipment(plate) {
     if (d.success && d.result?.records?.length) return d.result.records[0];
   } catch (_) {}
   return null;
+}
+
+// Inactive vehicles WITHOUT model code — 1.4M records.
+// License expired 13+ months, no degem_cd, not stolen, not cancelled.
+// Mostly old trailers / commercial vehicles.
+const CKAN_INACTIVE_NO_DEGEM = '6f6acd03-f351-4a8f-8ecf-df792f4f573a';
+
+async function fetchInactiveNoDegem(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_INACTIVE_NO_DEGEM}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+function mapInactiveNoDegemData(r) {
+  return {
+    mispar_rechev:   r.mispar_rechev,
+    tozeret_cd:      r.tozeret_cd,
+    tozeret_nm:      r.tozeret_nm,
+    degem_nm:        r.degem_nm,
+    shnat_yitzur:    r.shnat_yitzur,
+    sug_delek_nm:    r.sug_delek_nm,
+    misgeret:        r.mispar_shilda,
+    degem_manoa:     r.degem_manoa,
+    horaat_rishum:   r.horaat_rishum,
+    baalut:          'לא פעיל',
+    kinuy_mishari: null, ramat_gimur: null, tzeva_cd: null, tzeva_rechev: null,
+    tokef_dt: null, degem_cd: null, sug_degem: null, moed_aliya_lakvish: null,
+    zmig_kidmi: null, zmig_ahori: null, mivchan_acharon_dt: null,
+    kvutzat_zihum: null, ramat_eivzur_betihuty: null,
+    _isInactive: true,
+    _isPublic:   true, // suppress sections that depend on degem_cd / history
+    _publicType: { cd: null, nm: 'רכב ללא קוד דגם', icon: '🚫', label: 'רכב ללא קוד דגם' },
+    _totalWeight: r.mishkal_kolel,
+  };
 }
 
 // ─── Mappers from non-private datasets to common `c` shape ──────────
@@ -1505,6 +1566,9 @@ async function tryFallbackRegistries(plate) {
 
   const tzama = await fetchConstructionEquipment(plate);
   if (tzama) return mapConstructionEquipmentData(tzama);
+
+  const inactiveNoDegem = await fetchInactiveNoDegem(plate);
+  if (inactiveNoDegem) return mapInactiveNoDegemData(inactiveNoDegem);
 
   return null;
 }
@@ -2830,7 +2894,9 @@ renderHistory();
   const plate  = (params.get('plate') || '').replace(/\D/g, '');
   const action = params.get('action');
 
-  if (plate.length === 7 || plate.length === 8) {
+  // Allow short plates (4-6 digits) too — older private vehicles, motorcycles,
+  // construction equipment etc.
+  if (plate.length >= 4 && plate.length <= 8) {
     document.getElementById('plateInput').value = plate;
     syncOtpBoxes();
     fetchCar();
