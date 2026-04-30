@@ -355,14 +355,14 @@ async function fetchRecalls(plate) {
   el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> בודק ריקולים פתוחים...</div>`;
 
   try {
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_RECALL}&q=${plate}&limit=100`;
+    // Server-side exact match by plate number (more reliable than full-text q=)
+    const filters = encodeURIComponent(JSON.stringify({ MISPAR_RECHEV: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_RECALL}&filters=${filters}&limit=200`;
     const res = await fetch(url);
     const d   = await res.json();
     if (!d.success) throw new Error('failed');
 
-    let records = (d.result?.records ?? [])
-      .filter(r => String(r.MISPAR_RECHEV) === String(plate));
-
+    let records = d.result?.records ?? [];
     records.sort((a, b) => (b.TAARICH_PTICHA || '').localeCompare(a.TAARICH_PTICHA || ''));
 
     renderRecalls(records);
@@ -411,6 +411,135 @@ function renderRecalls(records) {
       <span style="font-size:0.88rem;font-weight:700;color:var(--red);">⚠️ נמצאו ${records.length} ריקולים שלא בוצעו לרכב זה</span>
     </div>
     <div>${rows}</div>`;
+}
+
+// ─── Importer price + estimated current value ────────────────
+const CKAN_IMPORTER = '39f455bf-6db0-4926-859d-017f34eacbcb';
+
+// Israeli used-car depreciation curve, calibrated against the gov.il
+// "מחירון משרד התחבורה" calculator on real cars:
+//   CX-5 2022 (4 yrs): gov.il ₪124k vs ours ₪124k → 71% retention
+//   CX-5 2014 (12 yrs): gov.il ₪47k vs ours ₪47k → 28% retention
+// Depreciation gets steeper from year 6 onwards (model becomes "old").
+function estimateCurrentValue(originalPrice, year, kmTotal, ownerCount) {
+  if (!originalPrice || !year) return null;
+  const age = new Date().getFullYear() - Number(year);
+  if (age < 0) return null;
+
+  let value = Number(originalPrice);
+  for (let i = 1; i <= age; i++) {
+    let rate;
+    if (i === 1)      rate = 0.110;  // year 1 initial drop
+    else if (i <= 5)  rate = 0.073;  // years 2-5 — calibrated against gov.il
+    else if (i <= 10) rate = 0.105;  // years 6-10 — aging model
+    else              rate = 0.140;  // years 11+ — accelerating end-of-life
+    value *= (1 - rate);
+  }
+
+  // Mileage adjustment vs Israeli avg of 15k/yr
+  if (kmTotal && age > 0) {
+    const avgKm = Number(kmTotal) / age;
+    if      (avgKm > 20000) value *= 0.92;
+    else if (avgKm > 15000) value *= 0.96;
+    else if (avgKm < 8000)  value *= 1.03;
+  }
+  // Ownership adjustment
+  if (ownerCount > 4)       value *= 0.92;
+  else if (ownerCount >= 2) value *= 0.97;
+
+  const mid = Math.round(value / 100) * 100;
+  return {
+    mid,
+    low:  Math.round(mid * 0.93 / 100) * 100,
+    high: Math.round(mid * 1.07 / 100) * 100,
+  };
+}
+
+async function fetchImporterPrice(tozeret_cd, degem_cd, year) {
+  const sec = document.getElementById('priceSection');
+  if (sec) sec.style.display = 'none';
+  if (!tozeret_cd || !degem_cd) return;
+  try {
+    const filters = encodeURIComponent(JSON.stringify({
+      tozeret_cd: Number(tozeret_cd),
+      degem_cd:   Number(degem_cd),
+      ...(year ? { shnat_yitzur: Number(year) } : {}),
+    }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_IMPORTER}&filters=${filters}&limit=5`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) return;
+    const recs = d.result?.records || [];
+    const exact = recs.find(r => String(r.shnat_yitzur) === String(year)) || recs[0];
+    if (exact) renderImporterPrice(exact);
+  } catch (_) {}
+}
+
+function renderImporterPrice(rec) {
+  const sec  = document.getElementById('priceSection');
+  const body = document.getElementById('priceBody');
+  if (!sec || !body) return;
+
+  const price    = Number(rec.mehir);
+  const importer = (rec.shem_yevuan || '').trim();
+  if (!price && !importer) return;
+
+  // Pull current car details for the depreciation calc
+  const plate = document.getElementById('stolenRaw')?.value;
+  const snap  = getHistory().find(x => x.plate === plate)?.snapshot || {};
+  const km    = snap.mileage || null;
+  const owners = snap.owners || null;
+  const year  = rec.shnat_yitzur || snap.year || null;
+  const est   = price ? estimateCurrentValue(price, year, km, owners) : null;
+
+  let html = '';
+  if (price && importer) {
+    html += `
+      <div class="price-grid">
+        <div class="price-cell">
+          <div class="price-cell-val">₪${price.toLocaleString('he-IL')}</div>
+          <div class="price-cell-lbl">מחיר חדש מקורי</div>
+        </div>
+        <div class="price-cell">
+          <div class="price-cell-val price-importer">${importer}</div>
+          <div class="price-cell-lbl">יבואן רשמי</div>
+        </div>
+      </div>`;
+  } else if (price) {
+    html += `
+      <div class="price-cell" style="text-align:center; padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:14px;">
+        <div class="price-cell-val">₪${price.toLocaleString('he-IL')}</div>
+        <div class="price-cell-lbl">מחיר חדש מקורי</div>
+      </div>`;
+  } else if (importer) {
+    html += `
+      <div class="price-cell" style="text-align:center; padding-bottom:14px; border-bottom:1px solid var(--border); margin-bottom:14px;">
+        <div class="price-cell-val price-importer">${importer}</div>
+        <div class="price-cell-lbl">יבואן רשמי</div>
+      </div>`;
+  }
+
+  if (est && price) {
+    const dropPct = Math.round((1 - est.mid / price) * 100);
+    html += `
+      <div class="price-est">
+        <div class="price-est-row">
+          <span class="price-est-lbl">ערך משוער היום</span>
+          <span class="price-est-val">~₪${est.mid.toLocaleString('he-IL')}</span>
+        </div>
+        <div class="price-est-range">טווח: ₪${est.low.toLocaleString('he-IL')} – ₪${est.high.toLocaleString('he-IL')}</div>
+        <div class="price-est-drop">ירידה של ${dropPct}% מהמחיר המקורי</div>
+      </div>`;
+  }
+
+  html += `
+    <div class="price-note">
+      <i class="fa-solid fa-circle-info"></i>
+      ההערכה מבוססת על עקומת ירידת ערך ממוצעת + תיקונים לפי ק"מ ובעלים. אינה תחליף לחוו"ד שמאי.
+    </div>`;
+
+  body.innerHTML = html;
+  sec.style.display = 'block';
 }
 
 // ─── Population comparison: same year + model ────────────────
@@ -1098,11 +1227,15 @@ function tryRenderTimeline() {
     const yr = ev.date.getFullYear();
     const yearMark = yr !== lastYear ? `<div class="tl-year-label">${yr}</div>` : '';
     lastYear = yr;
+    const metaParts = [];
+    if (ev.badge) metaParts.push(ev.badge);
+    if (ev.sub)   metaParts.push(`<span class="tl-sub">${ev.sub}</span>`);
+    const metaRow = metaParts.length ? `<div class="tl-meta-row">${metaParts.join('')}</div>` : '';
     return `${yearMark}<div class="tl-event ${ev.type}">
       <div class="tl-icon"><i class="${ICONS[ev.type]}"></i></div>
       <div class="tl-content">
-        <span class="tl-label">${ev.label}</span>
-        <div class="tl-right">${ev.badge||''}<span class="tl-sub">${ev.sub||''}</span></div>
+        <div class="tl-label">${ev.label}</div>
+        ${metaRow}
       </div>
     </div>`;
   }).join('');
@@ -1371,6 +1504,7 @@ async function fetchCar() {
     fetchRecalls(raw);
     fetchVehicleSpecs(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
     fetchModelPopulation(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+    fetchImporterPrice(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';

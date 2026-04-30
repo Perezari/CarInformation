@@ -558,82 +558,138 @@
   .hf-green  { background: rgba(34,197,94,0.1);   color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
 
 
-  /* ── Timeline ── */
+  /* ── Timeline (stylized road) ── */
   .timeline {
     position: relative;
-    padding: 4px 0;
+    padding: 4px 0 8px;
     direction: rtl;
   }
+  /* Asphalt road body */
   .timeline::before {
     content: ''; position: absolute;
-    right: 27px; top: 0; bottom: 0; width: 2px;
-    background: linear-gradient(to bottom,
-      transparent 0%, var(--accent) 5%,
-      var(--accent) 90%, transparent 100%);
-    opacity: 0.3;
+    right: 22px; top: 12px; bottom: 12px; width: 24px;
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.45) 0%,
+      #1a1a1d 22%,
+      #2c2c30 50%,
+      #1a1a1d 78%,
+      rgba(0,0,0,0.45) 100%);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.4);
+    border-radius: 1px;
+    z-index: 0;
+  }
+  [data-theme="light"] .timeline::before {
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.15) 0%,
+      #4a4a52 22%,
+      #5a5a62 50%,
+      #4a4a52 78%,
+      rgba(0,0,0,0.15) 100%);
+  }
+  /* Painted road dashes (center divider) */
+  .timeline::after {
+    content: ''; position: absolute;
+    right: 33px; top: 12px; bottom: 12px; width: 2px;
+    background-image: linear-gradient(to bottom, rgba(255,255,255,0.55) 50%, transparent 50%);
+    background-size: 2px 18px;
+    background-repeat: repeat-y;
+    z-index: 1;
   }
 
-  .tl-year-group { margin-bottom: 4px; }
+  .tl-year-group { margin-bottom: 6px; position: relative; z-index: 2; }
+  .tl-year-group:not(:first-child) { margin-top: 8px; }
 
+  /* Year pill — stands out as a chapter divider */
   .tl-year-label {
-    font-size: 0.68rem; font-weight: 800;
-    color: var(--text-muted); letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 16px 64px 6px 0;
-    display: block;
+    display: inline-block;
+    font-size: 0.74rem; font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    padding: 5px 14px;
+    margin: 14px 70px 10px 0;
+    background: rgba(232,168,37,0.08);
+    border: 1px solid rgba(232,168,37,0.28);
+    border-radius: 100px;
+    position: relative;
+    z-index: 2;
   }
+  .tl-year-group:first-child .tl-year-label { margin-top: 0; }
 
   .tl-event {
     position: relative;
-    display: flex; align-items: flex-start;
-    gap: 14px; padding: 10px 64px 10px 16px;
-    border-radius: 10px;
-    transition: background 0.15s;
+    display: block;
+    padding: 11px 76px 11px 14px;
+    border-radius: 12px;
+    margin-bottom: 4px;
+    transition: background 0.2s ease, transform 0.2s ease;
+    z-index: 2;
   }
-  .tl-event:hover { background: rgba(255,255,255,0.03); }
+  .tl-event:hover {
+    background: rgba(232,168,37,0.05);
+    transform: translateX(-3px);
+  }
 
-  /* Icon circle */
+  /* Icon disc — sits on the road */
   .tl-icon {
     position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
-    width: 20px; height: 20px; border-radius: 50%;
+    width: 32px; height: 32px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 9px; flex-shrink: 0; z-index: 1;
-    border: 2px solid var(--surface);
+    font-size: 13px; z-index: 3;
+    color: #1a1a1a;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 0 3px var(--surface);
   }
-  .tl-event.ev-birth   .tl-icon { background: var(--accent); color: #000; }
-  .tl-event.ev-road    .tl-icon { background: var(--accent); color: #000; }
-  .tl-event.ev-owner   .tl-icon { background: #7ae5ff; color: #000; }
-  .tl-event.ev-test    .tl-icon { background: var(--accent); color: #000; }
-  .tl-event.ev-recall  .tl-icon { background: var(--red);    color: #fff; }
-  .tl-event.ev-license .tl-icon { background: var(--accent); color: #000; }
+  [data-theme="light"] .tl-icon { box-shadow: 0 4px 12px rgba(0,0,0,0.18), 0 0 0 3px var(--surface); }
+
+  .tl-event.ev-birth   .tl-icon { background: linear-gradient(135deg, #fad377, #b87a0c); color: #1a1a1a; }
+  .tl-event.ev-road    .tl-icon { background: linear-gradient(135deg, #fad377, #b87a0c); color: #1a1a1a; }
+  .tl-event.ev-owner   .tl-icon { background: linear-gradient(135deg, #93c5fd, #2563eb); color: #fff; }
+  .tl-event.ev-test    .tl-icon { background: linear-gradient(135deg, #fde08a, #c98815); color: #1a1a1a; }
+  .tl-event.ev-recall  .tl-icon { background: linear-gradient(135deg, #fca5a5, #b91c1c); color: #fff; }
+  .tl-event.ev-license .tl-icon { background: linear-gradient(135deg, #fb7185, #be123c); color: #fff; }
   .tl-event.ev-today   .tl-icon {
-    background: var(--surface); color: #fff;
-    border: 2px solid rgba(255,255,255,0.5);
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
-    animation: tl-pulse 2s ease-in-out infinite;
+    background: var(--surface);
+    color: var(--accent);
+    box-shadow:
+      0 0 0 3px var(--surface),
+      0 0 0 5px var(--accent),
+      0 4px 14px rgba(0,0,0,0.45);
   }
-  @keyframes tl-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.4); }
-    50%       { box-shadow: 0 0 0 6px rgba(255,255,255,0); }
+  /* Expanding-ring pulse for "today" — clearly visible */
+  .tl-event.ev-today .tl-icon::before {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    animation: tl-ring-pulse 1.8s ease-out infinite;
+    pointer-events: none;
+  }
+  @keyframes tl-ring-pulse {
+    0%   { transform: scale(1);   opacity: 1; }
+    100% { transform: scale(2.4); opacity: 0; }
   }
 
-  .tl-content { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  /* Content stacks vertically — label prominent, meta below */
+  .tl-content { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .tl-label {
-    font-size: 0.85rem; font-weight: 700; color: var(--text);
-    white-space: nowrap;
+    font-size: 0.95rem; font-weight: 800;
+    color: var(--text); line-height: 1.25;
   }
-  .tl-right { display: flex; align-items: center; gap: 8px; }
-  .tl-sub   { font-size: 0.72rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
-  .tl-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 100px; }
-  .tl-badge-owner  { background: rgba(59,130,246,0.12); color: var(--blue);   border: 1px solid rgba(59,130,246,0.25); }
-  .tl-badge-recall { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
-  .tl-badge-test   { background: rgba(232,168,37,0.12); color: var(--accent); border: 1px solid rgba(232,168,37,0.25); }
-
-  .tl-connector {
-    position: absolute; right: 27px;
-    width: 2px; top: 0; bottom: 0;
-    background: var(--border); z-index: 0;
+  .tl-meta-row {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap;
   }
+  .tl-sub {
+    font-size: 0.78rem; color: var(--text-muted); font-weight: 500;
+  }
+  .tl-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.7rem; font-weight: 700;
+    padding: 3px 10px; border-radius: 100px;
+  }
+  .tl-badge-owner  { background: rgba(59,130,246,0.12); color: var(--blue);   border: 1px solid rgba(59,130,246,0.28); }
+  .tl-badge-recall { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.28); }
+  .tl-badge-test   { background: rgba(232,168,37,0.12); color: var(--accent); border: 1px solid rgba(232,168,37,0.28); }
 
   /* ── km-section ── */
   .km-section {
@@ -797,6 +853,67 @@
   .safety-feature.feat-no  i { color: var(--red);   }
   .safety-feature.feat-yes  { border-color: rgba(34,197,94,0.18); }
   .safety-feature.feat-no   { border-color: rgba(239,68,68,0.15); }
+
+  /* ── Price + Importer ── */
+  .price-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    padding-bottom: 16px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  @media (max-width: 540px) {
+    .price-grid { grid-template-columns: 1fr; gap: 10px; }
+  }
+  .price-cell {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .price-cell-val {
+    font-size: 1.4rem; font-weight: 900; color: var(--accent);
+    line-height: 1.2;
+  }
+  .price-importer {
+    font-size: 1rem; color: var(--text);
+    font-weight: 800;
+  }
+  .price-cell-lbl {
+    font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-top: 4px;
+  }
+
+  .price-est {
+    background: rgba(232,168,37,0.06);
+    border: 1px solid rgba(232,168,37,0.25);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .price-est-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .price-est-lbl { font-size: 0.85rem; font-weight: 700; color: var(--text-dim); }
+  .price-est-val { font-size: 1.6rem; font-weight: 900; color: var(--accent); }
+  .price-est-range {
+    font-size: 0.78rem; color: var(--text-muted); font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .price-est-drop {
+    font-size: 0.78rem; color: var(--text-dim); font-weight: 700;
+  }
+
+  .price-note {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 0.74rem; color: var(--text-muted);
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    line-height: 1.5;
+  }
+  .price-note i { color: var(--accent); margin-top: 2px; }
 
   /* ── Mileage trajectory (actual vs expected) ── */
   .mile-traj-card {
