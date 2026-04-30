@@ -1,13 +1,13 @@
 {
-  "name": "מאגר רכבים ישראל",
-  "short_name": "מאגר רכבים",
+  "name": "Veritas",
+  "short_name": "Veritas",
   "description": "בדיקת פרטי רכב ממאגרי data.gov.il — היסטוריית בעלויות, תקלות, בדיקות רישוי וקריאות שירות",
   "lang": "he",
   "dir": "rtl",
 
   "start_url": "./index.html",
   "scope": "./",
-  "id": "il.gov.car-lookup",
+  "id": "veritas.car-lookup",
 
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],

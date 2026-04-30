@@ -1,105 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Car Lookup">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Veritas">
   <defs>
-    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"  stop-color="#f5c95a"/>
-      <stop offset="50%" stop-color="#e8a825"/>
-      <stop offset="100%" stop-color="#b87a0c"/>
+    <linearGradient id="goldBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fad377"/>
+      <stop offset="50%"  stop-color="#f0c040"/>
+      <stop offset="100%" stop-color="#e8a825"/>
     </linearGradient>
-    <radialGradient id="bgGlow" cx="50%" cy="60%" r="55%">
-      <stop offset="0%"  stop-color="#e8a825" stop-opacity="0.18"/>
-      <stop offset="55%" stop-color="#e8a825" stop-opacity="0.04"/>
-      <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="headlightGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"  stop-color="#fff4cc" stop-opacity="1"/>
-      <stop offset="55%" stop-color="#f0c040" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="taillightGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"  stop-color="#ffb84a" stop-opacity="1"/>
-      <stop offset="60%" stop-color="#e8a825" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#e8a825" stop-opacity="0"/>
-    </radialGradient>
   </defs>
 
-  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="#0a0c10"/>
-  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bgGlow)"/>
+  <!-- Rounded square gold background -->
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#goldBg)"/>
 
-  <line x1="48" y1="404" x2="464" y2="404"
-        stroke="#e8a825" stroke-opacity="0.20" stroke-width="2.5" stroke-linecap="round"
-        stroke-dasharray="6 12"/>
-
-  <g id="carShape" stroke="url(#goldGrad)" fill="none"
+  <!-- Gearshift H-pattern in dark, centered -->
+  <g fill="none" stroke="#0a0c10" stroke-width="42"
      stroke-linecap="round" stroke-linejoin="round">
-
-    <!-- Main silhouette: low GT coupe (Aston DB11 / AMG GT inspired) -->
-    <path d="
-      M 50 360
-      L 42 340
-      C 38 322, 50 308, 70 304
-      L 92 302
-      C 110 290, 134 282, 162 276
-      L 198 270
-      C 224 250, 258 238, 296 240
-      L 332 248
-      C 360 256, 380 268, 392 282
-      L 432 296
-      C 450 302, 460 312, 460 326
-      L 458 342
-      L 444 358
-      L 426 364
-      L 414 364
-      C 412 344, 396 330, 374 330
-      C 352 330, 336 344, 334 364
-      L 188 364
-      C 186 344, 170 330, 148 330
-      C 126 330, 110 344, 108 364
-      Z
-    " stroke-width="6.5" pathLength="100"/>
-
-    <!-- Greenhouse / window line - long, low cabin -->
-    <path d="
-      M 204 270
-      C 226 254, 256 246, 288 248
-      L 322 254
-      C 346 260, 364 270, 378 282
-    " stroke-width="3.2" pathLength="100"/>
-
-    <!-- B-pillar (subtle, near rear) -->
-    <line x1="296" y1="248" x2="296" y2="278"
-          stroke-width="2.4" pathLength="100"/>
-
-    <!-- Door / character line - long horizontal accent -->
-    <path d="M 198 322 L 388 322"
-          stroke-width="2" stroke-opacity="0.55" pathLength="100"/>
-
-    <!-- Lower side skirt -->
-    <path d="M 116 358 L 386 358"
-          stroke-width="1.8" stroke-opacity="0.30" pathLength="100"/>
-
-    <!-- Front nose / grille -->
-    <path d="M 48 326 L 76 324"
-          stroke-width="2.4" pathLength="100"/>
-
-    <!-- Wheels -->
-    <circle cx="148" cy="364" r="36" stroke-width="6.5" pathLength="100"/>
-    <circle cx="374" cy="364" r="36" stroke-width="6.5" pathLength="100"/>
-
-    <!-- Rims -->
-    <circle cx="148" cy="364" r="13" stroke-width="3" pathLength="100"/>
-    <circle cx="374" cy="364" r="13" stroke-width="3" pathLength="100"/>
-
-    <!-- Spokes -->
-    <g stroke-width="1.6" stroke-opacity="0.6">
-      <line x1="135" y1="364" x2="161" y2="364" pathLength="100"/>
-      <line x1="148" y1="351" x2="148" y2="377" pathLength="100"/>
-      <line x1="361" y1="364" x2="387" y2="364" pathLength="100"/>
-      <line x1="374" y1="351" x2="374" y2="377" pathLength="100"/>
-    </g>
+    <line x1="128" y1="256" x2="384" y2="256"/>
+    <line x1="128" y1="156" x2="128" y2="356"/>
+    <line x1="256" y1="156" x2="256" y2="356"/>
+    <line x1="384" y1="156" x2="384" y2="356"/>
   </g>
-
-  <circle cx="54" cy="316" r="14" fill="url(#headlightGrad)"/>
-  <circle cx="54" cy="316" r="3.5" fill="#fff4cc"/>
-  <circle cx="450" cy="320" r="11" fill="url(#taillightGrad)"/>
-  <circle cx="450" cy="320" r="2.5" fill="#ffb84a"/>
 </svg>
