@@ -91,8 +91,8 @@
   /* ── Theme toggle button ── */
   .theme-toggle {
     position: fixed;
-    top: 18px;
-    left: 18px;
+    top: calc(env(safe-area-inset-top, 0px) + 14px);
+    left: calc(env(safe-area-inset-left, 0px) + 14px);
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -130,7 +130,13 @@
     .theme-toggle { display: none !important; }
   }
   @media (max-width: 480px) {
-    .theme-toggle { top: 12px; left: 12px; width: 40px; height: 40px; font-size: 14px; }
+    .theme-toggle {
+      top: calc(env(safe-area-inset-top, 0px) + 10px);
+      left: calc(env(safe-area-inset-left, 0px) + 10px);
+      width: 40px;
+      height: 40px;
+      font-size: 14px;
+    }
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -157,7 +163,14 @@
   }
 
   /* ── Layout ── */
-  .page { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 40px 20px 80px; }
+  .page {
+    position: relative; z-index: 1; max-width: 1100px; margin: 0 auto;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 40px)
+      calc(env(safe-area-inset-right, 0px) + 20px)
+      calc(env(safe-area-inset-bottom, 0px) + 80px)
+      calc(env(safe-area-inset-left, 0px) + 20px);
+  }
 
   /* ── Header ── */
   .header { text-align: center; margin-bottom: 48px; }
