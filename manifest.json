@@ -20,37 +20,37 @@
 
   "icons": [
     {
-      "src": "icon.svg",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "icon-maskable.svg",
+      "src": "icons/icon-maskable.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
     },
     {
-      "src": "icon-192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-maskable-512.png",
+      "src": "icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "apple-touch-icon.png",
+      "src": "icons/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
@@ -63,14 +63,14 @@
       "short_name": "חיפוש",
       "description": "התחל בדיקת רכב חדשה",
       "url": "./index.html?action=new",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "סריקת לוחית במצלמה",
       "short_name": "סריקה",
       "description": "פתח את המצלמה לזיהוי אוטומטי של מספר הרכב",
       "url": "./index.html?action=scan",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
 
