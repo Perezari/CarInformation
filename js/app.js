@@ -187,11 +187,12 @@ async function fetchTestHistory(plate) {
   kmBody.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נסועה ומידע היסטורי...</div>`;
 
   try {
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_HISTORY}&q=${plate}`;
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_HISTORY}&filters=${filters}&limit=1`;
     const res = await fetch(url);
     const d   = await res.json();
     if (!d.success) throw new Error('failed');
-    const raw = d.result?.records?.find(r => String(r.mispar_rechev) === String(plate));
+    const raw = d.result?.records?.[0];
     if (!raw) throw new Error('not found');
     renderVehicleHistory([raw], plate);
     updateHealthFromHistory(raw);
@@ -290,12 +291,13 @@ async function fetchOwnershipHistory(plate) {
   el.innerHTML = `<div class="km-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף היסטוריית בעלויות...</div>`;
 
   try {
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_OWNERSHIP}&q=${plate}&limit=50`;
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_OWNERSHIP}&filters=${filters}&limit=50`;
     const res = await fetch(url);
     const d   = await res.json();
     if (!d.success) throw new Error('failed');
-    const records = d.result?.records?.filter(r => String(r.mispar_rechev) === String(plate));
-    if (!records?.length) throw new Error('not found');
+    const records = d.result?.records || [];
+    if (!records.length) throw new Error('not found');
     const total = records.length;
     renderOwnershipHistory(records, total, plate);
     updateHealthFromOwnership(total);
@@ -1004,12 +1006,13 @@ async function fetchOffRoad(plate, standalone = false) {
   banner.style.display = 'none';
 
   try {
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=851ecab1-0622-4dbe-a6c7-f950cf82abf9&q=${plate}`;
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=851ecab1-0622-4dbe-a6c7-f950cf82abf9&filters=${filters}&limit=1`;
     const res = await fetch(url);
     const d = await res.json();
 
     if (!d.success) return;
-    const match = d.result?.records?.find(r => String(r.mispar_rechev) === String(plate));
+    const match = d.result?.records?.[0];
     if (!match) return;
 
     const make  = match.tozeret_nm || '';
@@ -1193,33 +1196,70 @@ async function fetchEmissionFilter(plate) {
   } catch (_) {}
 }
 
-// ─── Per-plate extras (towing hitch, tire load/speed codes) ──
-// Dataset: private + commercial vehicles, includes grira_nm and tire codes
-const CKAN_VEHICLE_EXTRAS = '0866573c-40cd-4ca8-91d2-9dd2d7a492e5';
+// ─── Per-plate extras (3 datasets fetched in parallel) ──────
+// 0866573c: private + commercial → grira_nm + tire codes
+// 83bfb278: vehicles eligible for license-fee discount (advanced safety)
+// 786b33b5: commercial >3.5t required to install cargo anchor points
+const CKAN_VEHICLE_EXTRAS  = '0866573c-40cd-4ca8-91d2-9dd2d7a492e5';
+const CKAN_SAFETY_DISCOUNT = '83bfb278-7be1-4dab-ae2d-40125a923da1';
+const CKAN_ANCHOR_POINTS   = '786b33b5-75c4-42a3-a241-b1af3c9ca487';
 
 async function fetchVehicleExtras(plate) {
   const wrap = document.getElementById('vehicleExtraRows');
   if (wrap) wrap.innerHTML = '';
   if (!plate) return;
+
+  const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+  const baseUrl = id => `https://data.gov.il/api/3/action/datastore_search?resource_id=${id}&filters=${filters}&limit=1`;
+
   try {
-    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
-    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_VEHICLE_EXTRAS}&filters=${filters}&limit=1`;
-    const res = await fetch(url);
-    const d   = await res.json();
-    if (!d.success || !d.result?.records?.length) return;
-    const r = d.result.records[0];
+    const [extrasRes, discountRes, anchorRes] = await Promise.allSettled([
+      fetch(baseUrl(CKAN_VEHICLE_EXTRAS)).then(r => r.json()),
+      fetch(baseUrl(CKAN_SAFETY_DISCOUNT)).then(r => r.json()),
+      fetch(baseUrl(CKAN_ANCHOR_POINTS)).then(r => r.json()),
+    ]);
 
     const rows = [];
-    const grira = (r.grira_nm || '').toString().trim();
-    if (grira) rows.push(['וו גרירה', grira]);
 
-    if (r.kod_omes_tzmig_kidmi || r.kod_mehirut_tzmig_kidmi) {
-      const front = [r.kod_omes_tzmig_kidmi, r.kod_mehirut_tzmig_kidmi].filter(Boolean).join(' ');
-      if (front) rows.push(['קוד צמיג קדמי (עומס/מהירות)', front]);
+    // Towing hitch + tire codes
+    if (extrasRes.status === 'fulfilled' && extrasRes.value?.success) {
+      const r = extrasRes.value.result?.records?.[0];
+      if (r) {
+        const grira = (r.grira_nm || '').toString().trim();
+        if (grira) rows.push(['וו גרירה', grira]);
+        if (r.kod_omes_tzmig_kidmi || r.kod_mehirut_tzmig_kidmi) {
+          const front = [r.kod_omes_tzmig_kidmi, r.kod_mehirut_tzmig_kidmi].filter(Boolean).join(' ');
+          if (front) rows.push(['קוד צמיג קדמי (עומס/מהירות)', front]);
+        }
+        if (r.kod_omes_tzmig_ahori || r.kod_mehirut_tzmig_ahori) {
+          const back = [r.kod_omes_tzmig_ahori, r.kod_mehirut_tzmig_ahori].filter(Boolean).join(' ');
+          if (back) rows.push(['קוד צמיג אחורי (עומס/מהירות)', back]);
+        }
+      }
     }
-    if (r.kod_omes_tzmig_ahori || r.kod_mehirut_tzmig_ahori) {
-      const back = [r.kod_omes_tzmig_ahori, r.kod_mehirut_tzmig_ahori].filter(Boolean).join(' ');
-      if (back) rows.push(['קוד צמיג אחורי (עומס/מהירות)', back]);
+
+    // Safety-system discount eligibility
+    if (discountRes.status === 'fulfilled' && discountRes.value?.success) {
+      if ((discountRes.value.result?.records || []).length > 0) {
+        rows.push([
+          'זכאי להנחה באגרה',
+          `<span style="color:var(--green); font-weight:800; display:inline-flex; align-items:center; gap:6px;">
+             <i class="fa-solid fa-circle-check"></i> כן · מערכת בטיחות מותקנת
+           </span>`
+        ]);
+      }
+    }
+
+    // Required to install cargo anchor points (commercial >3.5t)
+    if (anchorRes.status === 'fulfilled' && anchorRes.value?.success) {
+      if ((anchorRes.value.result?.records || []).length > 0) {
+        rows.push([
+          'נקודות עיגון לאבטחת מטענים',
+          `<span style="color:var(--accent); font-weight:800; display:inline-flex; align-items:center; gap:6px;">
+             <i class="fa-solid fa-anchor"></i> חובה (תקנות תעבורה תיקון 8)
+           </span>`
+        ]);
+      }
     }
 
     if (rows.length && wrap) {
@@ -1253,6 +1293,219 @@ async function fetchPublicVehicle(plate) {
     const d   = await res.json();
     if (d.success && d.result?.records?.length) return d.result.records[0];
   } catch (_) {}
+  return null;
+}
+
+// Inactive vehicles — license expired 13+ months ago, NOT stolen, NOT cancelled.
+// Same fields as the active registry; fallback when private + public fail.
+const CKAN_INACTIVE_VEHICLES = 'f6efe89a-fb3d-43a4-bb61-9bf12a9b9099';
+
+async function fetchInactiveVehicle(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_INACTIVE_VEHICLES}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+// Heavy / commercial registry — 413k records, includes trailers, trucks,
+// goods vehicles that aren't in the standard private or public registries.
+// Has chassis number + vehicle category but lacks license validity / color.
+const CKAN_HEAVY_COMMERCIAL = 'cd3acc5c-03c3-4c89-9c54-d40f93c0d790';
+
+async function fetchHeavyCommercial(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_HEAVY_COMMERCIAL}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+// Personal-import vehicles (יבוא אישי) — passenger cars imported privately.
+// Not in the main registries; has license + test dates and import type.
+const CKAN_PERSONAL_IMPORT = '03adc637-b6fe-402b-9937-7c3d3afc9140';
+
+async function fetchPersonalImport(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_PERSONAL_IMPORT}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+// Two-wheeler registry (motorcycles)
+const CKAN_MOTORCYCLES = 'bf9df4e2-d90d-4c0a-a400-19e15af8e95f';
+
+async function fetchMotorcycle(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_MOTORCYCLES}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+// Construction equipment (צמ"ה) — forklifts, cranes, bulldozers...
+// Note: the field is `mispar_tzama` (equipment ID), not mispar_rechev
+const CKAN_CONSTRUCTION = '58dc4654-16b1-42ed-8170-98fadec153ea';
+
+async function fetchConstructionEquipment(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_tzama: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_CONSTRUCTION}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
+// ─── Mappers from non-private datasets to common `c` shape ──────────
+// Each returns a `c`-like object plus helper flags consumed by fetchCar
+function mapPublicVehicleData(pub) {
+  return {
+    mispar_rechev:    pub.mispar_rechev,
+    tozeret_cd:       pub.tozeret_cd,
+    tozeret_nm:       pub.tozeret_nm,
+    degem_cd:         pub.degem_cd,
+    degem_nm:         pub.degem_nm,
+    shnat_yitzur:     pub.shnat_yitzur,
+    tzeva_cd:         pub.tzeva_cd,
+    tzeva_rechev:     pub.tzeva_rechev,
+    tokef_dt:         pub.tokef_dt,
+    kinuy_mishari:    pub.kinuy_mishari || null,
+    ramat_gimur:      null,
+    baalut:           'ציבורי',
+    _isPublic:        true,
+    _publicType:      { cd: pub.sug_rechev_cd, nm: pub.sug_rechev_nm, icon: publicVehicleType(pub.sug_rechev_cd, pub.sug_rechev_nm).icon, label: publicVehicleType(pub.sug_rechev_cd, pub.sug_rechev_nm).label },
+    _seats:           pub.mispar_mekomot,
+    _seatsNextDriver: pub.mispar_mekomot_leyd_nahag,
+    _totalWeight:     pub.mishkal_kolel,
+  };
+}
+function mapPersonalImportData(p) {
+  return {
+    mispar_rechev:      p.mispar_rechev,
+    tozeret_cd:         p.tozeret_cd,
+    tozeret_nm:         p.tozeret_nm,
+    degem_nm:           p.degem_nm,
+    shnat_yitzur:       p.shnat_yitzur,
+    sug_delek_nm:       p.sug_delek_nm,
+    degem_manoa:        p.degem_manoa,
+    misgeret:           p.shilda,
+    mivchan_acharon_dt: p.mivchan_acharon_dt,
+    tokef_dt:           p.tokef_dt,
+    moed_aliya_lakvish: p.moed_aliya_lakvish,
+    kinuy_mishari: null, ramat_gimur: null, tzeva_cd: null, tzeva_rechev: null,
+    baalut: null, degem_cd: null, sug_degem: null, horaat_rishum: null,
+    kvutzat_zihum: null, ramat_eivzur_betihuty: null,
+    zmig_kidmi: null, zmig_ahori: null,
+    _personalImportType: p.sug_yevu,
+  };
+}
+function mapMotorcycleData(m) {
+  return {
+    mispar_rechev:      m.mispar_rechev,
+    tozeret_cd:         m.tozeret_cd,
+    tozeret_nm:         m.tozeret_nm,
+    degem_nm:           m.degem_nm,
+    shnat_yitzur:       m.shnat_yitzur,
+    sug_delek_nm:       m.sug_delek_nm,
+    misgeret:           m.misgeret,
+    moed_aliya_lakvish: m.moed_aliya_lakvish,
+    horaat_rishum:      m.horaat_rishum,
+    baalut:             m.baalut || 'פרטי',
+    zmig_kidmi:         m.mida_zmig_kidmi,
+    zmig_ahori:         m.mida_zmig_ahori,
+    kinuy_mishari: null, ramat_gimur: null, tzeva_cd: null, tzeva_rechev: null,
+    tokef_dt: null, degem_cd: null, sug_degem: null, degem_manoa: null,
+    kvutzat_zihum: null, ramat_eivzur_betihuty: null,
+    _isPublic:    true,
+    _publicType:  { cd: m.sug_rechev_cd, nm: m.sug_rechev_nm || 'אופנוע', icon: '🏍️', label: m.sug_rechev_nm || 'אופנוע' },
+    _seats:       m.mispar_mekomot,
+    _totalWeight: m.mishkal_kolel,
+  };
+}
+function mapHeavyCommercialData(h) {
+  return {
+    mispar_rechev:      h.mispar_rechev,
+    tozeret_cd:         h.tozeret_cd,
+    tozeret_nm:         h.tozeret_nm,
+    degem_nm:           h.degem_nm,
+    shnat_yitzur:       h.shnat_yitzur,
+    sug_delek_nm:       h.sug_delek_nm,
+    misgeret:           h.mispar_shilda,
+    zmig_kidmi:         h.zmig_kidmi,
+    zmig_ahori:         h.zmig_ahori,
+    degem_manoa:        h.degem_manoa,
+    moed_aliya_lakvish: h.moed_aliya_lakvish,
+    horaat_rishum:      h.horaat_rishum,
+    baalut:             h.kvutzat_sug_rechev || 'מסחרי',
+    kinuy_mishari: null, ramat_gimur: null, tzeva_cd: null, tzeva_rechev: null,
+    tokef_dt: null, degem_cd: null, sug_degem: null,
+    kvutzat_zihum: null, ramat_eivzur_betihuty: null,
+    _isPublic:    true,
+    _publicType:  { cd: null, nm: h.kvutzat_sug_rechev || 'מסחרי', icon: '🚛', label: h.kvutzat_sug_rechev || 'מסחרי' },
+    _seats:       h.mispar_mekomot,
+    _seatsNextDriver: h.mispar_mekomot_leyd_nahag,
+    _totalWeight: h.mishkal_kolel,
+  };
+}
+function mapConstructionEquipmentData(t) {
+  const totalKg = t.mishkal_kolel_ton ? Number(t.mishkal_kolel_ton) * 1000 : (t.mishkal_ton ? Number(t.mishkal_ton) * 1000 : null);
+  return {
+    mispar_rechev:      t.mispar_tzama,
+    tozeret_cd:         t.shilda_totzar_cd,
+    tozeret_nm:         t.shilda_totzar_en_nm,
+    degem_nm:           t.degem_nm,
+    shnat_yitzur:       t.shnat_yitzur,
+    sug_delek_nm:       t.hanaa_nm,
+    misgeret:           t.mispar_shilda,
+    moed_aliya_lakvish: t.rishum_date ? String(t.rishum_date).slice(0, 10) : null,
+    tokef_dt:           t.tokef_date  ? String(t.tokef_date).slice(0, 10)  : null,
+    horaat_rishum:      null,
+    baalut:             t.sug_tzama_nm || 'צמ"ה',
+    kinuy_mishari: null, ramat_gimur: null, tzeva_cd: null, tzeva_rechev: null,
+    degem_cd: null, sug_degem: null, degem_manoa: null,
+    zmig_kidmi: null, zmig_ahori: null,
+    kvutzat_zihum: null, ramat_eivzur_betihuty: null,
+    _isPublic:    true,
+    _publicType:  { cd: t.sug_tzama_cd, nm: t.sug_tzama_nm || 'ציוד מכני הנדסי', icon: '🚜', label: t.sug_tzama_nm || 'ציוד מכני הנדסי' },
+    _totalWeight: totalKg,
+  };
+}
+
+// Try every fallback registry in order. Returns mapped `c` or null.
+async function tryFallbackRegistries(plate) {
+  const pub = await fetchPublicVehicle(plate);
+  if (pub) return mapPublicVehicleData(pub);
+
+  const inactive = await fetchInactiveVehicle(plate);
+  if (inactive) return Object.assign({}, inactive, { _isInactive: true });
+
+  const personal = await fetchPersonalImport(plate);
+  if (personal) return mapPersonalImportData(personal);
+
+  const moto = await fetchMotorcycle(plate);
+  if (moto) return mapMotorcycleData(moto);
+
+  const heavy = await fetchHeavyCommercial(plate);
+  if (heavy) return mapHeavyCommercialData(heavy);
+
+  const tzama = await fetchConstructionEquipment(plate);
+  if (tzama) return mapConstructionEquipmentData(tzama);
+
   return null;
 }
 
@@ -1585,7 +1838,7 @@ async function fetchCar() {
 
   // Reset cross-search UI state — sections we skip for some vehicle types must
   // not retain content from the previous search
-  ['publicBadge', 'priceSection', 'offRoadBanner'].forEach(id => {
+  ['publicBadge', 'priceSection', 'offRoadBanner', 'inactiveBanner'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -1595,49 +1848,52 @@ async function fetchCar() {
   if (ownSec) ownSec.style.display = '';
 
   try {
-    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${raw}`;
+    // Filters give us an exact-match instead of full-text substring match —
+    // e.g. plate "1008" must NOT match a record with plate 32087702
+    const mainFilters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(raw) }));
+    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${mainFilters}&limit=1`;
     const res = await fetch(apiUrl);
     const data = await res.json();
 
-    let c, isPublic = false;
+    let c, isPublic = false, isInactive = false;
     if (data.success && data.result.records.length) {
       c = data.result.records[0];
     } else {
-      // Fall back to public-vehicle registry (taxis / buses / share-taxis)
-      const pub = await fetchPublicVehicle(raw);
-      if (!pub) throw new Error('not found');
-      isPublic = true;
-      c = {
-        mispar_rechev:    pub.mispar_rechev,
-        tozeret_cd:       pub.tozeret_cd,
-        tozeret_nm:       pub.tozeret_nm,
-        degem_cd:         pub.degem_cd,
-        degem_nm:         pub.degem_nm,
-        shnat_yitzur:     pub.shnat_yitzur,
-        tzeva_cd:         pub.tzeva_cd,
-        tzeva_rechev:     pub.tzeva_rechev,
-        tokef_dt:         pub.tokef_dt,
-        // Don't fall back to degem_nm so we don't show identical model+kinuy rows
-        kinuy_mishari:    pub.kinuy_mishari || null,
-        // Public vehicles don't have a trim concept — leave empty
-        ramat_gimur:      null,
-        baalut:           'ציבורי',
-        _isPublic:        true,
-        _publicType:      { cd: pub.sug_rechev_cd, nm: pub.sug_rechev_nm },
-        _seats:           pub.mispar_mekomot,
-        _seatsNextDriver: pub.mispar_mekomot_leyd_nahag,
-        _totalWeight:     pub.mishkal_kolel,
-      };
+      // Try every other registry in order
+      c = await tryFallbackRegistries(raw);
+      if (!c) throw new Error('not found');
 
-      // Show the public badge + hide private-only sections
-      const pubBadge = document.getElementById('publicBadge');
-      if (pubBadge) {
-        const t = publicVehicleType(c._publicType.cd, c._publicType.nm);
-        pubBadge.innerHTML = `<span>${t.icon}</span><span>${t.label}</span>`;
-        pubBadge.style.display = 'inline-flex';
+      isPublic   = !!c._isPublic;
+      isInactive = !!c._isInactive;
+
+      // Show inactive banner
+      if (isInactive) {
+        const banner = document.getElementById('inactiveBanner');
+        if (banner) banner.style.display = 'flex';
       }
-      if (kmSec)  kmSec.style.display  = 'none';
-      if (ownSec) ownSec.style.display = 'none';
+      // Personal import — show import-type badge
+      if (c._personalImportType) {
+        const pubBadge = document.getElementById('publicBadge');
+        if (pubBadge) {
+          pubBadge.innerHTML = `<span>📦</span><span>${c._personalImportType}</span>`;
+          pubBadge.style.display = 'inline-flex';
+        }
+      }
+      // Public/moto/heavy/tzama all use _publicType for the badge
+      if (c._publicType) {
+        const pubBadge = document.getElementById('publicBadge');
+        if (pubBadge) {
+          const icon  = c._publicType.icon  || '🚗';
+          const label = c._publicType.label || c._publicType.nm;
+          pubBadge.innerHTML = `<span>${icon}</span><span>${label}</span>`;
+          pubBadge.style.display = 'inline-flex';
+        }
+      }
+      // Public-render types hide private-specific sections
+      if (isPublic) {
+        if (kmSec)  kmSec.style.display  = 'none';
+        if (ownSec) ownSec.style.display = 'none';
+      }
     }
 
     // Build names
@@ -1784,13 +2040,14 @@ async function fetchCar() {
     fetchModelPopulation(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
     fetchEmissionFilter(raw);  // covers both M1 (cars) and M3 (buses)
     fetchModelRecalls(engBrand, kinuyEn);
+    // grira_nm + tire codes + safety discount + anchor points apply to commercial too
+    fetchVehicleExtras(raw);
     if (!isPublic) {
-      // These all assume a private vehicle in the standard registries
+      // These assume a private vehicle in the standard registries
       fetchTestHistory(raw);
       fetchOwnershipHistory(raw);
       fetchOffRoad(raw);
       fetchImporterPrice(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
-      fetchVehicleExtras(raw);
     }
 
     statusMsg('');
@@ -2373,7 +2630,8 @@ async function ensureSnapshot(plate) {
   snapshotsLoading.add(plate);
 
   try {
-    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${plate}`;
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${filters}&limit=1`;
     const res  = await fetch(apiUrl);
     const data = await res.json();
     if (data.success && data.result?.records?.length) {
