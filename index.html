@@ -26,6 +26,7 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png?v=2">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=2">
 
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Veritas">
@@ -33,7 +34,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <link rel="stylesheet" href="css/app.css">
 </head>
@@ -176,6 +176,29 @@
     <div class="recent-wrap" id="recentWrap" style="display:none">
       <span class="recent-label">חיפושים אחרונים:</span>
       <div id="recentChips" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center;"></div>
+      <button class="compare-launch-btn" onclick="openCompareModal()" type="button">
+        <i class="fa-solid fa-scale-balanced"></i> השווה רכבים
+      </button>
+    </div>
+  </div>
+
+  <!-- Compare Cars Modal -->
+  <div id="compareModal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-scale-balanced"></i> השוואת רכבים</h3>
+        <button class="modal-close" onclick="closeCompareModal()" aria-label="סגור">×</button>
+      </div>
+
+      <div id="compareSelect" class="modal-body">
+        <p class="modal-intro">בחר 2-3 רכבים מההיסטוריה להשוואה צד-בצד</p>
+        <div id="compareList" class="compare-list"></div>
+        <button id="compareGoBtn" class="compare-go-btn" onclick="runCompare()" disabled>
+          <i class="fa-solid fa-scale-balanced"></i> השווה (0)
+        </button>
+      </div>
+
+      <div id="compareView" class="modal-body" style="display:none"></div>
     </div>
   </div>
 
@@ -236,12 +259,6 @@
 
   <!-- Hero -->
     <div class="hero-panel">
-      <div class="car-image-wrap" id="imgWrap">
-        <div class="image-shimmer" id="shimmer"></div>
-        <img id="carImg" src="" alt="car" style="opacity:0">
-        <div class="image-overlay"></div>
-      </div>
-
       <div class="car-info">
         <div>
           <div class="car-brand-row">
@@ -277,6 +294,14 @@
             <div class="stat-chip">
               <div class="label">צבע</div>
               <div class="value" id="qColor">—</div>
+            </div>
+            <div class="stat-chip" id="chipAvgKm">
+              <div class="label">נסועה ממוצעת לשנה</div>
+              <div class="value" id="qAvgKm">—</div>
+            </div>
+            <div class="stat-chip" id="chipFee">
+              <div class="label">אגרת רישוי שנתית משוערת</div>
+              <div class="value" id="qFee">—</div>
             </div>
           </div>
 

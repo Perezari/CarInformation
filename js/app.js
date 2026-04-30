@@ -3,9 +3,9 @@ const HISTORY_KEY = 'car_search_history';
 function getHistory() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
 }
-function addToHistory(plate, label, logoUrl) {
+function addToHistory(plate, label, logoUrl, snapshot) {
   let h = getHistory().filter(x => x.plate !== plate);
-  h.unshift({ plate, label, logo: logoUrl || '' });
+  h.unshift({ plate, label, logo: logoUrl || '', snapshot: snapshot || null });
   if (h.length > 5) h = h.slice(0,5);
   localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   renderHistory();
@@ -14,6 +14,13 @@ function removeFromHistory(plate) {
   const h = getHistory().filter(x => x.plate !== plate);
   localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   renderHistory();
+}
+function updateHistorySnapshot(plate, partial) {
+  const h = getHistory();
+  const idx = h.findIndex(x => x.plate === plate);
+  if (idx < 0) return;
+  h[idx].snapshot = { ...(h[idx].snapshot || {}), ...partial };
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
 }
 function renderHistory() {
   const h = getHistory();
@@ -203,8 +210,21 @@ function renderVehicleHistory(records, plate) {
   // kilometer_test_aharon, mispar_manoa, rishum_rishon_dt, mkoriut_nm,
   // shnui_zeva_ind, shinui_zmig_ind, shinui_mivne_ind, gapam_ind
   const mileage     = r.kilometer_test_aharon ?? r.nsoah ?? r.km ?? null;
+  if (mileage != null) updateHistorySnapshot(plate, { mileage: Number(mileage) });
   const engine      = r.mispar_manoa ?? null;
   const regDate     = r.rishum_rishon_dt ?? r.tariph_rischum ?? null;
+
+  // Update avg km/year insight chip
+  const avg = avgKmPerYear(mileage, regDate || tlData.base?.c?.moed_aliya_lakvish);
+  const cat = categorizeKmPerYear(avg);
+  const avgChip = document.getElementById('chipAvgKm');
+  if (avg && cat) {
+    setHtml('qAvgKm', `${avg.toLocaleString('he-IL')} ק"מ <span class="km-cat-badge km-cat-${cat.cls}">${cat.label}</span>`);
+    if (avgChip) avgChip.className = 'stat-chip ' + cat.cls;
+  } else {
+    set('qAvgKm', '—');
+    if (avgChip) avgChip.className = 'stat-chip';
+  }
   const ownership   = r.mkoriut_nm ?? r.mekoriyut ?? null;
   const colorChange = r.shnui_zeva_ind  ?? r.shinuy_tzeva ?? null;
   const tireChange  = r.shinui_zmig_ind ?? r.shinuy_bemidot_tzmig ?? null;
@@ -282,6 +302,7 @@ async function fetchOwnershipHistory(plate) {
 
 function renderOwnershipHistory(records, total, plate) {
   const el = document.getElementById('ownershipBody');
+  updateHistorySnapshot(plate, { owners: total });
 
   // CKAN structure: flat records with {mispar_rechev, baalut, baalut_dt, _id}
   // baalut_dt is numeric: 202211 = 11/2022
@@ -341,6 +362,7 @@ async function fetchRecalls(plate) {
 
     renderRecalls(records);
     updateHealthFromRecalls(records.length);
+    updateHistorySnapshot(plate, { recalls: records.length });
     tlData.recalls = records; tryRenderTimeline();
   } catch (e) {
     el.innerHTML = `<div class="km-no-data">לא ניתן לשלוף נתוני ריקול כרגע.</div>`;
@@ -479,79 +501,53 @@ function licenseChip(dateStr) {
   return 'green';
 }
 
-// ─── Car image from Wikipedia ─────────────────────────────────
-async function loadCarImage(kinuyEn, engBrand) {
-  const shimmer = document.getElementById('shimmer');
-  const img = document.getElementById('carImg');
+// ─── Computed insights ────────────────────────────────────────
 
-  const titleCase = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-  // Keep uppercase only for model codes like CX-5, Q5, E-TRON (contain digit or hyphen)
-  // Regular words like GRAND, CHEROKEE, MAZDA → Title Case
-  const smartCase = s => s.trim().split(/\s+/).map(w =>
-    /[\d-]/.test(w) ? w.toUpperCase() : titleCase(w)
-  ).join(' ');
+// Annual license fee estimate by pollution group (NIS, 2024 approximate values
+// from the Ministry of Transportation table for private vehicles).
+// Real numbers may vary slightly; this is a buyer's-eye estimate.
+const LICENSE_FEE_BY_POLLUTION = {
+  1:  643, 2:  838, 3: 1031, 4: 1225, 5: 1418,
+  6: 1612, 7: 1805, 8: 1999, 9: 2193, 10: 2386,
+  11: 2580, 12: 2773, 13: 2967, 14: 3160, 15: 3354,
+};
 
-  // Strip Israeli registry suffixes that don't appear in Wikipedia
-  // e.g. "SUPERB FL" → "SUPERB", "CX-5 AWD" → "CX-5"
-  const IL_SUFFIXES = /\b(FL|PHEV|HEV|MHEV|EV|AWD|4WD|4X4|SW|ST|SPORT|CROSS|PLUS|PRO|MAX|ELITE|PREMIUM|LUXURY|ACTIVE|STYLE|AMBITION|EXECUTIVE|LIMITED|SIGNATURE|PRESTIGE|MOTION|COMFORT|TREND|DESIGN|PULSE|ALLURE|FEEL|SHINE|PURETECH|BLUEHDI|ETSI|TSI|TDI|TFSI|FSI|GDI|CRDI|D|T|S|E|G|N|R)\b/g;
-  const cleanKinuy = kinuyEn.replace(IL_SUFFIXES, '').replace(/\s+/g, ' ').trim();
-
-  const kinuy = smartCase(cleanKinuy || kinuyEn || '');
-  const brand = titleCase((engBrand || '').trim());
-
-  // Does kinuy already start with the brand name?
-  const kinuyHasBrand = brand && kinuy.toLowerCase().startsWith(brand.toLowerCase());
-  const fullName = kinuyHasBrand ? kinuy : [brand, kinuy].filter(Boolean).join(' ');
-  // e.g. "Jeep Grand Cherokee", "Mazda CX-5"
-
-  const noHyphen  = fullName.replace(/-/g, '');
-  // Also try adding hyphen before digits: "Mazda CX5" → "Mazda CX-5"
-  const withHyphen = fullName.replace(/([A-Za-z])(\d)/g, '$1-$2');
-
-  const candidates = [
-    fullName,                          // "Mazda CX-5" / "Jeep Grand Cherokee"
-    withHyphen,                        // "Mazda CX-5" (if CX5 was input)
-    noHyphen,                          // "Mazda CX5"
-    fullName.replace(/\s/g, '_'),      // "Mazda_CX-5"
-    brand || kinuy,                    // "Mazda"
-    fullName + ' car',
-  ].filter((v, i, a) => v && a.indexOf(v) === i);
-
-  for (const term of candidates) {
-    try {
-      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data.thumbnail?.source) {
-        const src = data.thumbnail.source.replace(/\/\d+px-/, '/600px-');
-        img.src = src;
-        img.onload = () => { shimmer.style.display = 'none'; img.style.opacity = '1'; img.classList.add('loaded'); };
-        img.onerror = () => loadFallbackImage(brand || kinuy);
-        return;
-      }
-    } catch (_) {}
-  }
-  loadFallbackImage(brand || kinuy);
+function parsePollutionGroup(s) {
+  if (s == null) return null;
+  const m = String(s).match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
 }
 
-function loadFallbackImage(brand) {
-  const img = document.getElementById('carImg');
-  const shimmer = document.getElementById('shimmer');
-  const kw = encodeURIComponent((brand || 'car') + ' car');
-  // Unsplash source API
-  img.src = `https://source.unsplash.com/800x500/?${kw}`;
-  img.onload = () => {
-    shimmer.style.display = 'none';
-    img.style.opacity = '1';
-    img.classList.add('loaded');
-  };
-  img.onerror = () => {
-    shimmer.style.display = 'none';
-    img.src = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800';
-    img.style.opacity = '1';
-    img.classList.add('loaded');
-  };
+function estimateLicenseFee(pollutionRaw, year) {
+  const group = parsePollutionGroup(pollutionRaw);
+  if (!group) return null;
+  let fee = LICENSE_FEE_BY_POLLUTION[Math.min(15, Math.max(1, group))];
+  if (!fee) return null;
+  // Age discount: 10%/year starting at year 8, capped at 50%
+  const carYear = parseInt(year, 10);
+  if (carYear) {
+    const age = new Date().getFullYear() - carYear;
+    const discount = Math.min(0.5, Math.max(0, (age - 7) * 0.1));
+    fee = Math.round(fee * (1 - discount));
+  }
+  return fee;
+}
+
+function avgKmPerYear(totalKm, regDateStr) {
+  const km = Number(totalKm);
+  if (!km || !regDateStr) return null;
+  const regDate = new Date(regDateStr);
+  if (isNaN(regDate)) return null;
+  const years = (Date.now() - regDate) / (1000 * 60 * 60 * 24 * 365.25);
+  if (years < 0.5) return null;
+  return Math.round(km / years);
+}
+
+function categorizeKmPerYear(avg) {
+  if (avg == null) return null;
+  if (avg > 15000) return { label: 'גבוה',  cls: 'red' };
+  if (avg >= 8000) return { label: 'ממוצע', cls: 'accent' };
+  return                { label: 'נמוך',  cls: 'green' };
 }
 
 // ─── Brand logo ───────────────────────────────────────────────
@@ -764,6 +760,10 @@ function renderHealthScore() {
     `<span class="health-flag ${f.cls}">${f.txt}</span>`).join('');
 
   document.getElementById('healthWrap').style.display = 'flex';
+
+  // Update history snapshot for compare feature
+  const plate = document.getElementById('stolenRaw')?.value;
+  if (plate) updateHistorySnapshot(plate, { health: total, verdict });
 }
 
 // ─── Main fetch ───────────────────────────────────────────────
@@ -774,11 +774,7 @@ async function fetchCar() {
   statusMsg('<div class="status-loading"><span class="spin"><i class="fa-solid fa-circle-notch"></i></span> שולף נתונים...</div>');
   document.getElementById('resultCard').style.display = 'none';
 
-  // Reset image + logo
-  const img = document.getElementById('carImg');
-  img.style.opacity = '0';
-  img.src = '';
-  document.getElementById('shimmer').style.display = 'block';
+  // Reset brand logo
   const logo = document.getElementById('brandLogo');
   logo.style.display = 'none';
   logo.src = '';
@@ -861,12 +857,37 @@ async function fetchCar() {
       if (hebKey) engBrand = HEB_TO_ENG[hebKey];
     }
     loadBrandLogo(kinuyEn, tozetNm, engBrand);
-    loadCarImage(kinuyEn, engBrand);
 
-    // ── History ──
+    // ── Computed insights: license fee + avg km/year placeholder ──
+    const fee = estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur);
+    const feeChip = document.getElementById('chipFee');
+    if (fee) {
+      set('qFee', `₪${fee.toLocaleString('he-IL')}`);
+      feeChip.classList.add('accent');
+    } else {
+      set('qFee', '—');
+      feeChip.classList.remove('accent');
+    }
+    // Avg km/year is filled in renderVehicleHistory once mileage arrives
+    set('qAvgKm', '—');
+    document.getElementById('chipAvgKm').className = 'stat-chip';
+
+    // ── History (with snapshot for compare feature) ──
     const label = fPlate(raw) + (kinuyEn ? ` · ${kinuyEn}` : '');
     const logoUrl = document.getElementById('brandLogo')?.src || '';
-    addToHistory(raw, label, logoUrl);
+    const snapshot = {
+      make:    makeHeb,
+      model:   modelHeb,
+      year:    c.shnat_yitzur || null,
+      fuel:    c.sug_delek_nm || null,
+      color:   c.tzeva_rechev || null,
+      license: fDate(c.tokef_dt),
+      // mileage / owners / recalls / health filled in by async fetches below
+    };
+    addToHistory(raw, label, logoUrl, snapshot);
+
+    // ── Update URL for deep-linking / sharing (no history pollution) ──
+    history.replaceState(null, '', `${location.pathname}?plate=${raw}`);
 
     // ── gov.il history link ──
     document.getElementById('findcarLink').href = `https://www.gov.il/he/Departments/DynamicCollectors/private_vehicle_history_1?skip=0&mispar_rechev=${raw}`;
@@ -1340,6 +1361,14 @@ function shareWhatsApp() {
   const km       = document.querySelector('#kmBody [style*="2.2rem"]')?.textContent?.trim() || '';
   const owners   = document.querySelector('#ownershipBody [style*="2.8rem"]')?.textContent?.trim() || '';
 
+  const plateRaw = (document.getElementById('stolenRaw')?.value || '').replace(/\D/g, '');
+  // On localhost, point shareable links at the production URL
+  const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const baseUrl = isLocal
+    ? 'https://perezari.github.io/CarInformation/'
+    : `${location.origin}${location.pathname}`;
+  const link = plateRaw ? `${baseUrl}?plate=${plateRaw}` : '';
+
   const lines = [
     `*דוח רכב — ${plate}*`,
     `─────────────────`,
@@ -1351,6 +1380,8 @@ function shareWhatsApp() {
     `─────────────────`,
     `*ציון בריאות: ${health}/100 — ${verdict}*`,
     `─────────────────`,
+    link ? `לצפייה בדוח המלא:` : '',
+    link || '',
     `נתונים מ-data.gov.il`,
   ].filter(Boolean).join('\n');
 
@@ -1360,7 +1391,25 @@ function shareWhatsApp() {
 // ─── Camera OCR ───────────────────────────────────────────────
 let cameraStream = null;
 
+// Lazy-load Tesseract.js (~5MB) only when camera is used
+let tesseractPromise = null;
+function loadTesseract() {
+  if (tesseractPromise) return tesseractPromise;
+  tesseractPromise = new Promise((resolve, reject) => {
+    if (window.Tesseract) return resolve(window.Tesseract);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload  = () => resolve(window.Tesseract);
+    s.onerror = () => { tesseractPromise = null; reject(new Error('failed to load tesseract')); };
+    document.head.appendChild(s);
+  });
+  return tesseractPromise;
+}
+
 async function openCamera() {
+  // Kick off Tesseract download in parallel with camera permission
+  loadTesseract().catch(() => {});
+
   const modal = document.getElementById('cameraModal');
   const video = document.getElementById('cameraVideo');
   modal.style.display = 'flex';
@@ -1398,6 +1447,7 @@ async function captureAndOCR() {
   status.innerHTML = '<span class="spin"><i class="fa-solid fa-circle-notch"></i></span> מנתח תמונה...';
 
   try {
+    await loadTesseract();
     const worker = await Tesseract.createWorker('eng');
     await worker.setParameters({ tessedit_char_whitelist: '0123456789' });
     const { data: { text } } = await worker.recognize(canvas);
@@ -1418,6 +1468,187 @@ async function captureAndOCR() {
   }
 }
 
+// ─── Compare cars ────────────────────────────────────────────
+let compareSelection = [];
+const snapshotsLoading = new Set();
+
+// Backfill basic data for cars saved before the snapshot feature
+async function ensureSnapshot(plate) {
+  const h = getHistory();
+  const item = h.find(x => x.plate === plate);
+  if (!item) return;
+  if (item.snapshot && item.snapshot.year) return; // already populated
+  if (snapshotsLoading.has(plate)) return;
+  snapshotsLoading.add(plate);
+
+  try {
+    const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${plate}`;
+    const res  = await fetch(apiUrl);
+    const data = await res.json();
+    if (data.success && data.result?.records?.length) {
+      const c = data.result.records[0];
+      updateHistorySnapshot(plate, {
+        make:    c.tozeret_nm || '',
+        model:   c.kinuy_mishari || c.degem_nm || '',
+        year:    c.shnat_yitzur || null,
+        fuel:    c.sug_delek_nm || null,
+        color:   c.tzeva_rechev || null,
+        license: fDate(c.tokef_dt),
+      });
+    }
+  } catch (_) {}
+  finally { snapshotsLoading.delete(plate); }
+}
+
+function openCompareModal() {
+  const h = getHistory();
+  if (h.length < 2) {
+    statusMsg('<span class="status-error"><i class="fa-solid fa-circle-info"></i> דרושים לפחות 2 רכבים בהיסטוריה כדי להשוות</span>');
+    setTimeout(() => statusMsg(''), 3500);
+    return;
+  }
+  compareSelection = [];
+  document.getElementById('compareModal').style.display = 'flex';
+  document.getElementById('compareSelect').style.display = 'block';
+  document.getElementById('compareView').style.display = 'none';
+  renderCompareList();
+
+  // Backfill snapshots for any history items missing them
+  h.forEach(item => {
+    if (!item.snapshot || !item.snapshot.year) {
+      ensureSnapshot(item.plate).then(() => renderCompareList());
+    }
+  });
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModal').style.display = 'none';
+}
+
+function renderCompareList() {
+  const h = getHistory();
+  const list = document.getElementById('compareList');
+  list.innerHTML = h.map(x => {
+    const sel = compareSelection.includes(x.plate);
+    const disabled = !sel && compareSelection.length >= 3;
+    return `
+      <label class="compare-item ${sel ? 'selected' : ''} ${disabled ? 'disabled' : ''}">
+        <input type="checkbox" ${sel ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+               onchange="toggleCompareItem('${x.plate}')">
+        ${x.logo ? `<img src="${x.logo}" class="cmp-item-logo" onerror="this.style.display='none'">` : `<i class="fa-solid fa-car cmp-item-icon"></i>`}
+        <div class="cmp-item-text">
+          <div class="cmp-item-label">${x.label}</div>
+          ${x.snapshot ? `<div class="cmp-item-meta">${x.snapshot.year || ''} · ${x.snapshot.fuel || ''} · ${x.snapshot.color || ''}</div>` : `<div class="cmp-item-meta">אין מידע נוסף</div>`}
+        </div>
+      </label>`;
+  }).join('');
+
+  const btn = document.getElementById('compareGoBtn');
+  btn.disabled = compareSelection.length < 2;
+  btn.innerHTML = `<i class="fa-solid fa-scale-balanced"></i> השווה (${compareSelection.length})`;
+}
+
+function toggleCompareItem(plate) {
+  const i = compareSelection.indexOf(plate);
+  if (i >= 0) compareSelection.splice(i, 1);
+  else if (compareSelection.length < 3) compareSelection.push(plate);
+  renderCompareList();
+}
+
+async function runCompare() {
+  if (compareSelection.length < 2) return;
+  // Make sure snapshots are loaded for all selected cars
+  const btn = document.getElementById('compareGoBtn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"><i class="fa-solid fa-circle-notch"></i></span> טוען נתונים...';
+  await Promise.all(compareSelection.map(p => ensureSnapshot(p)));
+  btn.innerHTML = orig; btn.disabled = false;
+
+  const h = getHistory();
+  const cars = compareSelection.map(p => h.find(x => x.plate === p)).filter(Boolean);
+
+  const get = (c, key) => c.snapshot?.[key];
+
+  // Find best/worst per metric for highlighting
+  const ages = cars.map(c => Number(get(c, 'year')) || 0);
+  const newestYear = Math.max(...ages.filter(Boolean));
+  const oldestYear = Math.min(...ages.filter(Boolean));
+  const mileages = cars.map(c => Number(get(c, 'mileage')) || Infinity).filter(v => v !== Infinity);
+  const lowMileage = mileages.length ? Math.min(...mileages) : null;
+  const highMileage = mileages.length ? Math.max(...mileages) : null;
+  const owners = cars.map(c => Number(get(c, 'owners')) || Infinity).filter(v => v !== Infinity);
+  const lowOwners = owners.length ? Math.min(...owners) : null;
+  const highOwners = owners.length ? Math.max(...owners) : null;
+  const recalls = cars.map(c => Number(get(c, 'recalls')) ?? 0);
+  const healths = cars.map(c => Number(get(c, 'health')) || 0);
+  const bestHealth = Math.max(...healths);
+  const worstHealth = Math.min(...healths);
+
+  const fmt = v => (v == null || v === '' ? '<span class="cmp-na">—</span>' : v);
+  const fmtKm = v => v ? Number(v).toLocaleString('he-IL') + ' ק"מ' : '<span class="cmp-na">—</span>';
+
+  const cls = (val, best, worst) => {
+    if (val == null || best == null || best === worst) return '';
+    if (val === best) return 'cmp-good';
+    if (val === worst) return 'cmp-bad';
+    return '';
+  };
+
+  const cols = cars.map(c => `<th>
+    <div class="cmp-col-head">
+      ${c.logo ? `<img src="${c.logo}" class="cmp-head-logo" onerror="this.style.display='none'">` : ''}
+      <div class="cmp-head-model">${get(c, 'model') || c.label.split('·')[0].trim()}</div>
+      <div class="cmp-head-plate">${fPlate(c.plate)}</div>
+    </div>
+  </th>`).join('');
+
+  const row = (label, vals, classifier) => `
+    <tr>
+      <td class="cmp-row-label">${label}</td>
+      ${vals.map((v, i) => {
+        const cls = classifier ? classifier(i) : '';
+        return `<td class="cmp-row-val ${cls}">${v}</td>`;
+      }).join('')}
+    </tr>`;
+
+  const tableHtml = `
+    <div class="compare-table-wrap">
+      <table class="compare-table">
+        <thead><tr><th></th>${cols}</tr></thead>
+        <tbody>
+          ${row('יצרן',         cars.map(c => fmt(get(c, 'make'))))}
+          ${row('דגם',          cars.map(c => fmt(get(c, 'model'))))}
+          ${row('שנת ייצור',    cars.map(c => fmt(get(c, 'year'))),
+              i => cls(Number(get(cars[i], 'year')), newestYear, oldestYear))}
+          ${row('דלק',          cars.map(c => fmt(get(c, 'fuel'))))}
+          ${row('צבע',          cars.map(c => fmt(get(c, 'color'))))}
+          ${row('תוקף רישיון',  cars.map(c => fmt(get(c, 'license'))))}
+          ${row('נסועה',        cars.map(c => fmtKm(get(c, 'mileage'))),
+              i => { const v = Number(get(cars[i], 'mileage')); return cls(v, lowMileage, highMileage); })}
+          ${row('ידיים',        cars.map(c => fmt(get(c, 'owners'))),
+              i => { const v = Number(get(cars[i], 'owners')); return cls(v, lowOwners, highOwners); })}
+          ${row('ריקולים פתוחים', cars.map(c => fmt(get(c, 'recalls') ?? '—')),
+              i => { const v = recalls[i]; const min = Math.min(...recalls); const max = Math.max(...recalls); return cls(v, min, max); })}
+          ${row('ציון בריאות',  cars.map(c => { const h = get(c, 'health'); return h ? `<strong>${h}/100</strong>` : '<span class="cmp-na">—</span>'; }),
+              i => cls(healths[i], bestHealth, worstHealth))}
+        </tbody>
+      </table>
+    </div>
+    <div class="cmp-note"><i class="fa-solid fa-circle-info"></i> ההשוואה מבוססת על נתונים שנשמרו בעת החיפוש האחרון של כל רכב</div>
+    <button class="cmp-back-btn" onclick="backToCompareSelect()"><i class="fa-solid fa-arrow-right"></i> חזור לבחירה</button>
+  `;
+
+  document.getElementById('compareView').innerHTML = tableHtml;
+  document.getElementById('compareSelect').style.display = 'none';
+  document.getElementById('compareView').style.display = 'block';
+}
+
+function backToCompareSelect() {
+  document.getElementById('compareSelect').style.display = 'block';
+  document.getElementById('compareView').style.display = 'none';
+}
+
 // ─── Theme toggle ────────────────────────────────────────────
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -1430,3 +1661,20 @@ function toggleTheme() {
 
 // Init
 renderHistory();
+
+// Deep-link: read URL params on load
+(function initFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const plate  = (params.get('plate') || '').replace(/\D/g, '');
+  const action = params.get('action');
+
+  if (plate.length === 7 || plate.length === 8) {
+    document.getElementById('plateInput').value = plate;
+    syncOtpBoxes();
+    fetchCar();
+  } else if (action === 'scan') {
+    openCamera();
+  } else if (action === 'new') {
+    document.getElementById('plateInput').focus();
+  }
+})();
