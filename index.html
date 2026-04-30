@@ -9,6 +9,16 @@
 <!-- ── PWA / Icons ── -->
 <meta name="theme-color" content="#0a0c10">
 
+<!-- Apply saved theme before paint to avoid flash -->
+<script>
+  (function() {
+    var t = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', t === 'light' ? '#f5f5f7' : '#0a0c10');
+  })();
+</script>
+
 <meta name="description" content="בדיקת פרטי רכב ממאגרי data.gov.il — היסטוריית בעלויות, תקלות, בדיקות רישוי וקריאות שירות">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -28,6 +38,11 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<button id="themeToggle" onclick="toggleTheme()" class="theme-toggle"
+        type="button" aria-label="החלף ערכת נושא בהיר/כהה" title="החלף ערכת נושא">
+  <i class="fa-solid fa-sun icon-sun" aria-hidden="true"></i>
+  <i class="fa-solid fa-moon icon-moon" aria-hidden="true"></i>
+</button>
 <div id="pdf-loader">
   <svg class="car-loader-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs>

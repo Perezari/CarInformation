@@ -15,6 +15,124 @@
     --purple: #a855f7;
   }
 
+  /* ── Light theme ── */
+  [data-theme="light"] {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --surface2: #f2f3f6;
+    --border: rgba(0,0,0,0.08);
+    --border-active: rgba(0,0,0,0.18);
+    --accent: #c47f1a;
+    --accent2: #e0a020;
+    --text: #1a1d24;
+    --text-muted: #6b7280;
+    --text-dim: #4b5563;
+    --red: #dc2626;
+    --green: #16a34a;
+    --blue: #2563eb;
+    --purple: #9333ea;
+  }
+  [data-theme="light"] .bg-grid {
+    background-image:
+      linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+  }
+  [data-theme="light"] .bg-glow {
+    background: radial-gradient(ellipse 60% 40% at 50% -10%, rgba(232,168,37,0.18) 0%, transparent 70%);
+  }
+  [data-theme="light"] .header h1 {
+    background: linear-gradient(135deg, #1a1d24 30%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  [data-theme="light"] .otp-cell {
+    background: #ffffff;
+    border-color: rgba(196,127,26,0.35);
+    color: var(--text);
+  }
+  [data-theme="light"] .otp-cell.filled {
+    background: rgba(196,127,26,0.06);
+  }
+  [data-theme="light"] #pdf-loader {
+    background: rgba(245,245,247,0.92);
+  }
+  [data-theme="light"] #pdf-loader-text {
+    color: rgba(0,0,0,0.85);
+  }
+  [data-theme="light"] .car-image-wrap {
+    background: #e5e7eb;
+  }
+  [data-theme="light"] .image-shimmer {
+    background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+    background-size: 200% 100%;
+  }
+  [data-theme="light"] .brand-logo,
+  [data-theme="light"] .recent-chip img.chip-logo,
+  [data-theme="light"] .recent-chip:hover img.chip-logo {
+    filter: brightness(0);
+    opacity: 0.78;
+  }
+  [data-theme="light"] .health-gauge-track {
+    stroke: rgba(0,0,0,0.08);
+  }
+  [data-theme="light"] .tl-event:hover { background: rgba(0,0,0,0.03); }
+  [data-theme="light"] .km-table tr:hover td { background: rgba(0,0,0,0.025); }
+  [data-theme="light"] .tl-event.ev-today .tl-icon {
+    background: var(--surface);
+    border: 2px solid rgba(0,0,0,0.35);
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+    color: var(--text);
+  }
+  [data-theme="light"] @keyframes tl-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0.3); }
+    50%      { box-shadow: 0 0 0 6px rgba(0,0,0,0); }
+  }
+
+  /* ── Theme toggle button ── */
+  .theme-toggle {
+    position: fixed;
+    top: 18px;
+    left: 18px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border-active);
+    color: var(--accent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    z-index: 100;
+    overflow: hidden;
+    transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s, background 0.3s;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    font-family: inherit;
+  }
+  .theme-toggle:hover {
+    transform: scale(1.08);
+    border-color: var(--accent);
+    box-shadow: 0 6px 24px rgba(232,168,37,0.3);
+  }
+  .theme-toggle:active { transform: scale(0.94); }
+  .theme-toggle i {
+    position: absolute;
+    transition:
+      transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+      opacity 0.35s ease;
+  }
+  .theme-toggle .icon-sun  { opacity: 0; transform: rotate(-180deg) scale(0); }
+  .theme-toggle .icon-moon { opacity: 1; transform: rotate(0)       scale(1); }
+  [data-theme="light"] .theme-toggle .icon-sun  { opacity: 1; transform: rotate(0)      scale(1); color: #d97706; }
+  [data-theme="light"] .theme-toggle .icon-moon { opacity: 0; transform: rotate(180deg) scale(0); }
+  @media print {
+    .theme-toggle { display: none !important; }
+  }
+  @media (max-width: 480px) {
+    .theme-toggle { top: 12px; left: 12px; width: 40px; height: 40px; font-size: 14px; }
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {

@@ -1418,5 +1418,15 @@ async function captureAndOCR() {
   }
 }
 
+// ─── Theme toggle ────────────────────────────────────────────
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', next === 'light' ? '#f5f5f7' : '#0a0c10');
+}
+
 // Init
 renderHistory();
