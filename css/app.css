@@ -730,6 +730,62 @@
   .action-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(232,168,37,0.06); }
   .action-btn i { font-size: 13px; }
 
+  /* ── Environment + Safety scales ── */
+  .scale-row {
+    position: relative;
+    margin: 22px 0 10px;
+    direction: ltr;
+  }
+  .scale-arrow {
+    position: absolute;
+    top: -16px;
+    transform: translateX(-50%);
+    color: var(--blue);
+    font-size: 18px;
+    line-height: 1;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  }
+  .scale-cells {
+    display: flex;
+    gap: 1px;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .scale-cell {
+    flex: 1;
+    text-align: center;
+    padding: 7px 0;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    min-width: 0;
+  }
+
+  .safety-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  @media (max-width: 540px) {
+    .safety-features { grid-template-columns: 1fr; }
+  }
+  .safety-feature {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .safety-feature i { font-size: 1rem; flex-shrink: 0; }
+  .safety-feature.feat-yes i { color: var(--green); }
+  .safety-feature.feat-no  i { color: var(--red);   }
+  .safety-feature.feat-yes  { border-color: rgba(34,197,94,0.18); }
+  .safety-feature.feat-no   { border-color: rgba(239,68,68,0.15); }
+
   /* ── Compare cars ── */
   .compare-launch-btn {
     display: inline-flex; align-items: center; gap: 7px;

@@ -229,6 +229,9 @@
   </div>
 
   <input type="hidden" id="stolenRaw" value="">
+  <!-- Hidden spans kept so the PDF report still has access to these values -->
+  <span id="dPollution" hidden></span>
+  <span id="dSafety"    hidden></span>
 
   <!-- Result -->
   <div id="resultCard">
@@ -351,8 +354,6 @@
         <div class="data-row"><span class="data-label">סוג דלק</span><span class="data-value" id="dFuel">—</span></div>
         <div class="data-row"><span class="data-label">צמיג קדמי</span><span class="data-value" id="dTireF">—</span></div>
         <div class="data-row"><span class="data-label">צמיג אחורי</span><span class="data-value" id="dTireR">—</span></div>
-        <div class="data-row"><span class="data-label">קבוצת זיהום</span><span class="data-value" id="dPollution">—</span></div>
-        <div class="data-row"><span class="data-label">רמת איבזור בטיחות</span><span class="data-value" id="dSafety">—</span></div>
       </div>
 
       <!-- בעלות ורישום -->
@@ -380,6 +381,18 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- סביבה + בטיחות (טוען אסינכרונית, מוצג אם יש דאטה) -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="data-section" id="envSection" style="display:none">
+        <div class="section-title"><i class="fa-solid fa-leaf"></i> סביבה</div>
+        <div id="envBody"></div>
+      </div>
+      <div class="data-section" id="safetySection" style="display:none">
+        <div class="section-title"><i class="fa-solid fa-shield-halved"></i> בטיחות</div>
+        <div id="safetyBody"></div>
+      </div>
     </div>
 
     <!-- ציר זמן -->

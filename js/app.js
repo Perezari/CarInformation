@@ -409,6 +409,130 @@ function renderRecalls(records) {
     <div>${rows}</div>`;
 }
 
+// ─── Vehicle specs (environment + safety) ────────────────────
+const CKAN_VEHICLE_SPECS = '142afde2-6228-49f9-8a29-9b6c3a0cbe40';
+
+async function fetchVehicleSpecs(tozeret_cd, degem_cd, year) {
+  const envSection    = document.getElementById('envSection');
+  const safetySection = document.getElementById('safetySection');
+  if (envSection)    envSection.style.display    = 'none';
+  if (safetySection) safetySection.style.display = 'none';
+  if (!tozeret_cd || !degem_cd) return;
+
+  try {
+    const q = `${tozeret_cd} ${degem_cd} ${year || ''}`.trim();
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_VEHICLE_SPECS}&q=${encodeURIComponent(q)}&limit=20`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) return;
+
+    const records = d.result?.records || [];
+    const exact = records.find(r =>
+      String(r.tozeret_cd) === String(tozeret_cd) &&
+      String(r.degem_cd)   === String(degem_cd) &&
+      (!year || String(r.shnat_yitzur) === String(year))
+    );
+    const loose = records.find(r =>
+      String(r.tozeret_cd) === String(tozeret_cd) &&
+      String(r.degem_cd)   === String(degem_cd)
+    );
+    const match = exact || loose;
+    if (match) renderVehicleSpecs(match);
+  } catch (_) {}
+}
+
+function buildScale(min, max, current, lowIsGood) {
+  const total = max - min + 1;
+  const idx = Math.max(0, Math.min(total - 1, Math.round(Number(current)) - min));
+  const arrowPos = ((idx + 0.5) / total) * 100;
+
+  // Pollution: green on left (1) → red on right (15)
+  // Safety:    red on left (0)   → green on right (8)
+  const greenToRed = ['#0d7c3e','#2c8c47','#4a9d52','#69ad5e','#88be69','#a7ce75','#c5d97a','#dde080','#f0d566','#f4b94e','#ed9a3d','#e57b32','#dc5c2a','#cf3a25','#b51d20'];
+  const redToGreen = ['#b51d20','#cf3a25','#ed9a3d','#f4b94e','#dde080','#88be69','#4a9d52','#2c8c47','#0d7c3e'];
+  const palette = lowIsGood ? greenToRed : redToGreen;
+
+  let cells = '';
+  for (let i = 0; i < total; i++) {
+    const color = palette[Math.round(i * (palette.length - 1) / Math.max(1, total - 1))];
+    cells += `<div class="scale-cell" style="background:${color}">${min + i}</div>`;
+  }
+  return `
+    <div class="scale-row">
+      <div class="scale-arrow" style="left:${arrowPos}%"><i class="fa-solid fa-caret-down"></i></div>
+      <div class="scale-cells">${cells}</div>
+    </div>`;
+}
+
+function renderVehicleSpecs(s) {
+  // ── Environment section ──
+  const envSection = document.getElementById('envSection');
+  const envBody    = document.getElementById('envBody');
+  if (envSection && envBody) {
+    let html = '';
+    if (s.madad_yarok != null) {
+      html += `<div class="data-row"><span class="data-label">מדד ירוק</span><span class="data-value">${s.madad_yarok}</span></div>`;
+    }
+    if (s.kvutzat_zihum != null) {
+      html += `
+        <div class="data-row"><span class="data-label">קבוצת זיהום</span><span class="data-value">קבוצה ${s.kvutzat_zihum} מתוך 15</span></div>
+        ${buildScale(1, 15, s.kvutzat_zihum, true)}`;
+    }
+    const tkina = (s.sug_tkina_nm || '').trim();
+    if (tkina) {
+      html += `<div class="data-row"><span class="data-label">סוג תקינה</span><span class="data-value">${tkina}</span></div>`;
+    }
+    const mamir = (s.sug_mamir_nm || '').trim();
+    if (mamir && !/לא ידוע/.test(mamir)) {
+      html += `<div class="data-row"><span class="data-label">סוג ממיר</span><span class="data-value">${mamir}</span></div>`;
+    }
+    if (html) {
+      envBody.innerHTML = html;
+      envSection.style.display = 'block';
+    }
+  }
+
+  // ── Safety section ──
+  const safetySection = document.getElementById('safetySection');
+  const safetyBody    = document.getElementById('safetyBody');
+  if (safetySection && safetyBody) {
+    let html = '';
+    if (s.ramat_eivzur_betihuty != null) {
+      html += `<div class="data-row"><span class="data-label">רמת אבזור בטיחותי</span><span class="data-value">${s.ramat_eivzur_betihuty} מתוך 8</span></div>`;
+      html += buildScale(0, 8, s.ramat_eivzur_betihuty, false);
+    }
+
+    const features = [
+      ['zihuy_holchey_regel_ind',           'זיהוי הולכי רגל'],
+      ['zihuy_tamrurey_tnua_ind',           'זיהוי תמרורי תנועה'],
+      ['zihuy_rechev_do_galgali',           'זיהוי רכב דו-גלגלי'],
+      ['bakarat_stiya_menativ_ind',         'בקרת סטייה מנתיב'],
+      ['matzlemat_reverse_ind',             'מצלמת רוורס'],
+      ['teura_automatit_benesiya_kadima_ind', 'תאורה אוטומטית קדמית'],
+      ['shlita_automatit_beorot_gvohim_ind',  'שליטה באורות גבוהים'],
+      ['nitur_merhak_milfanim_ind',         'ניטור מרחק מלפנים'],
+      ['zihuy_beshetah_nistar_ind',         'זיהוי שטח מת'],
+      ['bakarat_shyut_adaptivit_ind',       'בקרת שיוט אדפטיבית'],
+      ['maarechet_ezer_labalam_ind',        'מערכת עזר לבלם'],
+      ['blima_otomatit_nesia_leahor',       'בלימה אוטומטית בנסיעה לאחור'],
+    ];
+    const presentFeatures = features.filter(([k]) => s[k] != null);
+    if (presentFeatures.length) {
+      html += `<div class="safety-features">${presentFeatures.map(([k, label]) => {
+        const has = Number(s[k]) === 1;
+        const cls = has ? 'feat-yes' : 'feat-no';
+        const icon = has ? 'fa-circle-check' : 'fa-circle-xmark';
+        return `<div class="safety-feature ${cls}"><i class="fa-solid ${icon}"></i><span>${label}</span></div>`;
+      }).join('')}</div>`;
+    }
+
+    if (html) {
+      safetyBody.innerHTML = html;
+      safetySection.style.display = 'block';
+    }
+  }
+}
+
 // ─── Off-road check ───────────────────────────────────────────
 async function fetchOffRoad(plate, standalone = false) {
   const banner = document.getElementById('offRoadBanner');
@@ -905,11 +1029,12 @@ async function fetchCar() {
     initHealthScore(c);
     tlData.base = { c }; tryRenderTimeline();
 
-    // ── Test history + mileage + ownership + off-road + recalls (async, non-blocking) ──
+    // ── Test history + mileage + ownership + off-road + recalls + specs (async, non-blocking) ──
     fetchTestHistory(raw);
     fetchOwnershipHistory(raw);
     fetchOffRoad(raw);
     fetchRecalls(raw);
+    fetchVehicleSpecs(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
