@@ -255,8 +255,14 @@
   .otp-search-btn:active { transform: scale(0.97); }
 
   @media (max-width: 480px) {
-    .otp-cell { width: 38px; height: 50px; font-size: 1.2rem; border-radius: 10px; }
-    .plate-otp-boxes { gap: 5px; }
+    .otp-cell { width: 34px; height: 46px; font-size: 1.05rem; border-radius: 9px; }
+    .plate-otp-boxes { gap: 4px; }
+    /* Camera button shrinks too so 8-digit plate + button fit comfortably */
+    #cameraBtn {
+      width: 34px !important; height: 34px !important;
+      font-size: 12px !important; border-radius: 9px !important;
+    }
+    .plate-otp-wrap > div:first-child { gap: 6px !important; }
   }
 
   .search-status { text-align: center; font-size: 0.9rem; min-height: 24px; }
@@ -673,6 +679,8 @@
     cursor: pointer; transition: all 0.18s;
     font-family: 'Heebo', sans-serif;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    max-width: 100%;
   }
   .recent-chip img.chip-logo {
     width: 22px; height: 22px; object-fit: contain;
@@ -748,6 +756,11 @@
     padding: 20px;
     animation: fadeIn 0.2s ease;
   }
+
+  /* When any modal is open: lock background scroll + hide theme toggle so it
+     doesn't overlap the modal's close button */
+  body.modal-open { overflow: hidden; }
+  body.modal-open .theme-toggle { display: none; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .modal-card {
     background: var(--surface);
@@ -845,10 +858,11 @@
     padding: 14px 12px;
     border-bottom: 2px solid var(--border-active);
   }
-  .cmp-col-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 100px; text-align: right; }
+  .cmp-col-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 120px; text-align: right; }
   .cmp-head-logo { width: 28px; height: 28px; object-fit: contain; filter: brightness(0) invert(1); opacity: 0.85; }
   [data-theme="light"] .cmp-head-logo { filter: brightness(0); }
-  .cmp-head-model { font-size: 0.85rem; font-weight: 800; color: var(--text); text-align: right; }
+  .cmp-head-model { font-size: 0.85rem; font-weight: 800; color: var(--text); text-align: right; white-space: nowrap; }
+  .cmp-head-plate { white-space: nowrap; }
   .cmp-head-plate {
     font-family: 'IBM Plex Mono', monospace;
     background: #f5c518; color: #111;
@@ -885,7 +899,17 @@
   @media (max-width: 540px) {
     .compare-table th, .compare-table td { padding: 8px 8px; font-size: 0.75rem; }
     .cmp-row-label { width: 80px; }
-    .cmp-col-head { min-width: 80px; }
+    .cmp-col-head { min-width: 110px; }
+
+    /* Compare modal goes fullscreen on mobile */
+    .modal-overlay { padding: 0; }
+    .modal-card {
+      max-width: 100%; width: 100%;
+      max-height: 100vh; height: 100vh;
+      border-radius: 0; border: none;
+    }
+    .modal-body { padding: 16px; }
+    .compare-table-wrap { margin: 0 -16px 16px; padding: 0 16px; }
   }
 
   /* ── Print ── */

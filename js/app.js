@@ -221,6 +221,7 @@ function renderVehicleHistory(records, plate) {
   if (avg && cat) {
     setHtml('qAvgKm', `${avg.toLocaleString('he-IL')} ק"מ <span class="km-cat-badge km-cat-${cat.cls}">${cat.label}</span>`);
     if (avgChip) avgChip.className = 'stat-chip ' + cat.cls;
+    updateHistorySnapshot(plate, { avgKm: avg });
   } else {
     set('qAvgKm', '—');
     if (avgChip) avgChip.className = 'stat-chip';
@@ -838,7 +839,7 @@ async function fetchCar() {
     const kinuyEn = (c.kinuy_mishari || '').trim();
     // Extract English brand from tozeret_nm — may be Hebrew (e.g. "מאזדה יפן")
     const HEB_TO_ENG = {
-      'מאזדה':'Mazda','טויוטה':'Toyota','הונדה':'Honda','ניסאן':'Nissan',
+      'מאזדה':'Mazda','מזדה':'Mazda','טויוטה':'Toyota','הונדה':'Honda','ניסאן':'Nissan',
       'יונדאי':'Hyundai','קיה':'Kia','מיצובישי':'Mitsubishi','סובארו':'Subaru',
       'סוזוקי':'Suzuki','אינפיניטי':'Infiniti','לקסוס':'Lexus',
       'פולקסווגן':'Volkswagen','אאודי':'Audi','אודי':'Audi',
@@ -882,7 +883,8 @@ async function fetchCar() {
       fuel:    c.sug_delek_nm || null,
       color:   c.tzeva_rechev || null,
       license: fDate(c.tokef_dt),
-      // mileage / owners / recalls / health filled in by async fetches below
+      fee:     estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur),
+      // mileage / avgKm / owners / recalls / health filled in by async fetches below
     };
     addToHistory(raw, label, logoUrl, snapshot);
 
@@ -1413,6 +1415,7 @@ async function openCamera() {
   const modal = document.getElementById('cameraModal');
   const video = document.getElementById('cameraVideo');
   modal.style.display = 'flex';
+  setModalOpen(true);
   document.getElementById('ocrStatus').textContent = 'פותח מצלמה...';
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -1429,6 +1432,7 @@ function closeCamera() {
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
   document.getElementById('cameraModal').style.display = 'none';
   document.getElementById('cameraVideo').srcObject = null;
+  setModalOpen(false);
 }
 
 async function captureAndOCR() {
@@ -1468,6 +1472,11 @@ async function captureAndOCR() {
   }
 }
 
+// ─── Modal helpers ───────────────────────────────────────────
+function setModalOpen(isOpen) {
+  document.body.classList.toggle('modal-open', !!isOpen);
+}
+
 // ─── Compare cars ────────────────────────────────────────────
 let compareSelection = [];
 const snapshotsLoading = new Set();
@@ -1494,6 +1503,7 @@ async function ensureSnapshot(plate) {
         fuel:    c.sug_delek_nm || null,
         color:   c.tzeva_rechev || null,
         license: fDate(c.tokef_dt),
+        fee:     estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur),
       });
     }
   } catch (_) {}
@@ -1511,6 +1521,7 @@ function openCompareModal() {
   document.getElementById('compareModal').style.display = 'flex';
   document.getElementById('compareSelect').style.display = 'block';
   document.getElementById('compareView').style.display = 'none';
+  setModalOpen(true);
   renderCompareList();
 
   // Backfill snapshots for any history items missing them
@@ -1523,6 +1534,7 @@ function openCompareModal() {
 
 function closeCompareModal() {
   document.getElementById('compareModal').style.display = 'none';
+  setModalOpen(false);
 }
 
 function renderCompareList() {
@@ -1584,6 +1596,12 @@ async function runCompare() {
   const healths = cars.map(c => Number(get(c, 'health')) || 0);
   const bestHealth = Math.max(...healths);
   const worstHealth = Math.min(...healths);
+  const fees = cars.map(c => Number(get(c, 'fee')) || Infinity).filter(v => v !== Infinity);
+  const lowFee  = fees.length ? Math.min(...fees) : null;
+  const highFee = fees.length ? Math.max(...fees) : null;
+  const avgKms = cars.map(c => Number(get(c, 'avgKm')) || Infinity).filter(v => v !== Infinity);
+  const lowAvgKm  = avgKms.length ? Math.min(...avgKms) : null;
+  const highAvgKm = avgKms.length ? Math.max(...avgKms) : null;
 
   const fmt = v => (v == null || v === '' ? '<span class="cmp-na">—</span>' : v);
   const fmtKm = v => v ? Number(v).toLocaleString('he-IL') + ' ק"מ' : '<span class="cmp-na">—</span>';
@@ -1626,6 +1644,10 @@ async function runCompare() {
           ${row('תוקף רישיון',  cars.map(c => fmt(get(c, 'license'))))}
           ${row('נסועה',        cars.map(c => fmtKm(get(c, 'mileage'))),
               i => { const v = Number(get(cars[i], 'mileage')); return cls(v, lowMileage, highMileage); })}
+          ${row('ממוצע נסועה לשנה', cars.map(c => fmtKm(get(c, 'avgKm'))),
+              i => { const v = Number(get(cars[i], 'avgKm')); return cls(v, lowAvgKm, highAvgKm); })}
+          ${row('אגרת רישוי משוערת', cars.map(c => { const f = get(c, 'fee'); return f ? `₪${Number(f).toLocaleString('he-IL')}` : '<span class="cmp-na">—</span>'; }),
+              i => { const v = Number(get(cars[i], 'fee')); return cls(v, lowFee, highFee); })}
           ${row('ידיים',        cars.map(c => fmt(get(c, 'owners'))),
               i => { const v = Number(get(cars[i], 'owners')); return cls(v, lowOwners, highOwners); })}
           ${row('ריקולים פתוחים', cars.map(c => fmt(get(c, 'recalls') ?? '—')),
