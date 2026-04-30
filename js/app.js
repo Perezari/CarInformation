@@ -1160,6 +1160,16 @@ function closeModelRecallsModal() {
   setModalOpen(false);
 }
 
+// ─── Sources modal ───────────────────────────────────────────
+function openSourcesModal() {
+  document.getElementById('sourcesModal').style.display = 'flex';
+  setModalOpen(true);
+}
+function closeSourcesModal() {
+  document.getElementById('sourcesModal').style.display = 'none';
+  setModalOpen(false);
+}
+
 // ─── Emission-reduction filter (retrofit) ──────────────────
 const CKAN_EMISSION_FILTER = '7cb2bd95-bf2e-49b6-aea1-fcb5ff6f0473';
 

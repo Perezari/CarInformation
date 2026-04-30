@@ -138,9 +138,15 @@
 <div class="page">
   <!-- Header -->
   <div class="header">
-    <div class="header-badge">
-      <i class="fa-solid fa-shield-halved"></i>
-      מאגר הרכבים הלאומי
+    <div class="header-badges">
+      <div class="header-badge">
+        <i class="fa-solid fa-shield-halved"></i>
+        מאגר הרכבים הלאומי
+      </div>
+      <button class="header-info-btn" onclick="openSourcesModal()" type="button" aria-label="מקורות מידע">
+        <i class="fa-solid fa-circle-info"></i>
+        מקורות מידע
+      </button>
     </div>
     <h1>בדיקת פרטי רכב</h1>
     <p>מידע מלא ממאגרי נתונים.gov.il — הזן מספר רישוי לחיפוש מיידי</p>
@@ -503,6 +509,86 @@
           <button class="modal-close" onclick="closeModelRecallsModal()" aria-label="סגור">×</button>
         </div>
         <div id="modelRecallsModalBody" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- מודל מקורות מידע -->
+    <div id="sourcesModal" class="modal-overlay" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-database"></i> מקורות המידע</h3>
+          <button class="modal-close" onclick="closeSourcesModal()" aria-label="סגור">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-intro">
+            כל הנתונים בדוח נשלפים בזמן אמת ממאגרי data.gov.il — אין לנו דאטהבייס משלנו.
+            כך שכל מידע שתקבל הוא הכי עדכני שיש למשרד התחבורה.
+          </p>
+
+          <div class="src-section">
+            <div class="src-section-title">📋 רישומי רכב — מאגרי בסיס</div>
+            <div class="src-item"><div class="src-name">רכבים פרטיים פעילים</div><div class="src-desc">פרטים בסיסיים: יצרן, דגם, שנה, צבע, רישיון, מנוע, צמיגים, רמת גימור</div></div>
+            <div class="src-item"><div class="src-name">רכבים ציבוריים</div><div class="src-desc">מוניות, אוטובוסים, מוניות שירות — כולל מספר מקומות ומשקל</div></div>
+            <div class="src-item"><div class="src-name">רכבים לא פעילים</div><div class="src-desc">רישיון פג מ-13 חודשים, לא גנובים, ללא ביטול סופי</div></div>
+            <div class="src-item"><div class="src-name">יבוא אישי</div><div class="src-desc">רכבים פרטיים שיובאו בייבוא אישי (חדש/משומש)</div></div>
+            <div class="src-item"><div class="src-name">אופנועים</div><div class="src-desc">רישום דו-גלגליים פעילים</div></div>
+            <div class="src-item"><div class="src-name">רכבים מסחריים כבדים</div><div class="src-desc">נגררים, משאיות, רכבי משא</div></div>
+            <div class="src-item"><div class="src-name">ציוד מכני הנדסי (צמ"ה)</div><div class="src-desc">מלגזות, עגורנים, ציוד הנדסי</div></div>
+            <div class="src-item"><div class="src-name">לא פעילים ללא קוד דגם</div><div class="src-desc">רכבים ישנים שאין להם רישום מודרני</div></div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">📜 היסטוריה ובעלויות</div>
+            <div class="src-item"><div class="src-name">היסטוריית טסטים + קילומטרז'</div><div class="src-desc">נסועה אחרונה, מספר מנוע, שינויי צבע/מבנה/צמיג, גפ"מ</div></div>
+            <div class="src-item"><div class="src-name">היסטוריית בעלויות</div><div class="src-desc">רשימת בעלים לאורך השנים, סוגי בעלות, תאריכי החלפה</div></div>
+            <div class="src-item"><div class="src-name">ירידה מהכביש</div><div class="src-desc">רכבים שהוצאו משימוש סופי</div></div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">🛡️ בטיחות וריקולים</div>
+            <div class="src-item"><div class="src-name">ריקולים פתוחים לרכב</div><div class="src-desc">תקלות שדווחו לרכב הספציפי ולא טופלו</div></div>
+            <div class="src-item"><div class="src-name">היסטוריית ריקולים לדגם</div><div class="src-desc">קמפיינים מ-2013, סוג תקלה, אופן תיקון, יבואן</div></div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">🌍 סביבה ומפרט טכני</div>
+            <div class="src-item"><div class="src-name">מפרט מורחב לדגם</div><div class="src-desc">נפח מנוע, כוח סוס, גיר, בטיחות, פליטות (CO₂, NOₓ, PM), מערכות עזר לנהג</div></div>
+            <div class="src-item"><div class="src-name">מסנני פליטה</div><div class="src-desc">רכבים שהותקן בהם מסנן זיהום (אחרי-יצור)</div></div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">💰 כלכלה</div>
+            <div class="src-item"><div class="src-name">מחירון יבואן</div><div class="src-desc">מחיר חדש מקורי + שם היבואן הרשמי</div></div>
+            <div class="src-item">
+              <div class="src-name">חישוב פנימי — אגרת רישוי משוערת</div>
+              <div class="src-desc">מחושב לפי קבוצת זיהום + שנת ייצור (משוער; קישור למחשבון רשמי)</div>
+            </div>
+            <div class="src-item">
+              <div class="src-name">חישוב פנימי — ערך משוער היום</div>
+              <div class="src-desc">עקומת ירידת ערך מכוילת לפי משרד התחבורה + תיקונים לק"מ ובעלים</div>
+            </div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">🏷️ תיוגים מיוחדים</div>
+            <div class="src-item"><div class="src-name">וו גרירה + קודי צמיג</div><div class="src-desc">נתונים פר-רכב על וו גרירה ועומס/מהירות צמיגים</div></div>
+            <div class="src-item"><div class="src-name">זכאות להנחה באגרה</div><div class="src-desc">רכבים עם מערכת בטיחות מתקדמת — זכאים להנחה</div></div>
+            <div class="src-item"><div class="src-name">חובת נקודות עיגון</div><div class="src-desc">מסחריים מעל 3.5 טון שחייבים בהתקנת נקודות עיגון למטענים</div></div>
+            <div class="src-item"><div class="src-name">תג חניה לנכה</div><div class="src-desc">רכבים מורשים לשאת תג חניה לנכה</div></div>
+          </div>
+
+          <div class="src-section">
+            <div class="src-section-title">🌐 מקורות חיצוניים</div>
+            <div class="src-item"><div class="src-name">Wikipedia</div><div class="src-desc">תמונה ייצוגית של דגם הרכב (אם נמצא ערך תואם)</div></div>
+          </div>
+
+          <div class="src-footer">
+            <a href="https://data.gov.il/he/dataset/?tags=%D7%9B%D7%9C%D7%99+%D7%A8%D7%9B%D7%91" target="_blank" rel="noopener">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              עיון בכל מאגרי הרכב באתר data.gov.il
+            </a>
+          </div>
+        </div>
       </div>
     </div>
 
