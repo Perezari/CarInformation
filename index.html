@@ -357,6 +357,7 @@
         <div class="data-row"><span class="data-label">צמיג קדמי</span><span class="data-value" id="dTireF">—</span></div>
         <div class="data-row"><span class="data-label">צמיג אחורי</span><span class="data-value" id="dTireR">—</span></div>
         <div id="techExtraRows"></div>
+        <div id="vehicleExtraRows"></div>
       </div>
 
       <!-- בעלות ורישום -->
@@ -391,6 +392,7 @@
       <div class="data-section" id="envSection" style="display:none">
         <div class="section-title"><i class="fa-solid fa-leaf"></i> סביבה</div>
         <div id="envBody"></div>
+        <div id="envExtraRows"></div>
       </div>
       <div class="data-section" id="safetySection" style="display:none">
         <div class="section-title"><i class="fa-solid fa-shield-halved"></i> בטיחות</div>
@@ -466,11 +468,28 @@
       <div class="km-section">
         <div class="km-header">
           <div class="km-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--accent)"></i> ריקולים שלא בוצעו</div>
-          <button onclick="openRecallSite()" class="findcar-btn" style="border:none;cursor:pointer;font-family:'Heebo',sans-serif;">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i> <span id="recallBtnTxt">מלא ב-gov.il</span>
-          </button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="modelRecallsBtn" onclick="openModelRecallsModal()" class="findcar-btn"
+                    style="display:none; border:none; cursor:pointer; font-family:'Heebo',sans-serif;">
+              <i class="fa-solid fa-clock-rotate-left"></i> היסטוריית ריקולים <span id="modelRecallsBadge"></span>
+            </button>
+            <button onclick="openRecallSite()" class="findcar-btn" style="border:none;cursor:pointer;font-family:'Heebo',sans-serif;">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i> <span id="recallBtnTxt">מלא ב-gov.il</span>
+            </button>
+          </div>
         </div>
         <div id="recallBody"></div>
+      </div>
+    </div>
+
+    <!-- מודל היסטוריית ריקולים לדגם -->
+    <div id="modelRecallsModal" class="modal-overlay" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> היסטוריית ריקולים לדגם</h3>
+          <button class="modal-close" onclick="closeModelRecallsModal()" aria-label="סגור">×</button>
+        </div>
+        <div id="modelRecallsModalBody" class="modal-body"></div>
       </div>
     </div>
 

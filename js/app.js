@@ -1056,6 +1056,180 @@ function openStolenCheck() {
   window.open('https://www.gov.il/apps/police/stolencar', '_blank');
 }
 
+// ─── Generic collapsible toggle ──────────────────────────────
+function toggleCollapsible(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('is-collapsed');
+}
+
+// ─── Historical recalls for the model (since 2013) ──────────
+const CKAN_MODEL_RECALLS = '2c33523f-87aa-44ec-a736-edbb0a82975e';
+
+let _modelRecallsCache = null;
+
+async function fetchModelRecalls(engBrand, modelName) {
+  const btn   = document.getElementById('modelRecallsBtn');
+  const badge = document.getElementById('modelRecallsBadge');
+  if (btn)   btn.style.display   = 'none';
+  if (badge) badge.textContent   = '';
+  _modelRecallsCache = null;
+  if (!engBrand) return;
+
+  try {
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_MODEL_RECALLS}&q=${encodeURIComponent(engBrand)}&limit=300`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success) return;
+
+    const norm = s => (s || '').toString().toLowerCase().replace(/[-\s_]/g, '');
+    const targetBrand = norm(engBrand);
+    const targetModel = norm(modelName);
+
+    const records = (d.result?.records || []).filter(r => {
+      if (norm(r.TOZAR_TEUR) !== targetBrand) return false;
+      if (!targetModel || targetModel.length < 2) return true;
+      const tokens = (r.DEGEM || '').toString().split(',').map(norm);
+      return tokens.some(t => t.includes(targetModel) || targetModel.includes(t));
+    });
+
+    if (!records.length) return;
+
+    records.sort((a, b) => Number(b.SHNAT_RECALL || 0) - Number(a.SHNAT_RECALL || 0));
+    _modelRecallsCache = records;
+
+    // Reveal the trigger button with a count badge
+    if (btn)   btn.style.display = 'inline-flex';
+    if (badge) badge.textContent = `(${records.length})`;
+  } catch (_) {}
+}
+
+function modelRecallsHTML(records) {
+  const total    = records.length;
+  const importer = records.find(r => r.YEVUAN_TEUR)?.YEVUAN_TEUR || null;
+  const tel      = records.find(r => r.TELEPHONE)?.TELEPHONE || null;
+  const site     = records.find(r => r.WEBSITE)?.WEBSITE || null;
+
+  const items = records.map(r => {
+    const yr     = r.SHNAT_RECALL || '';
+    const range  = [r.BUILD_BEGIN_A, r.BUILD_END_A].filter(Boolean).map(s => String(s).slice(0, 7)).join(' → ');
+    const cat    = r.SUG_TAKALA  || '';
+    const desc   = r.TEUR_TAKALA || '';
+    const fix    = r.OFEN_TIKUN  || '';
+    const sevCls = /סידרת|בטיחות/.test(r.SUG_RECALL || '') ? 'mr-severe' : 'mr-service';
+    return `
+      <div class="mr-item ${sevCls}">
+        <div class="mr-head">
+          <span class="mr-year">${yr}</span>
+          <span class="mr-cat">${cat || (r.SUG_RECALL || 'ריקול')}</span>
+          ${range ? `<span class="mr-range">דגמים: ${range}</span>` : ''}
+        </div>
+        ${desc ? `<div class="mr-desc">${desc}</div>` : ''}
+        ${fix  ? `<div class="mr-fix"><i class="fa-solid fa-screwdriver-wrench"></i> ${fix}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="mr-summary">
+      <div class="mr-count">${total}</div>
+      <div class="mr-count-lbl">ריקולים נפתחו לדגם זה מאז 2013</div>
+    </div>
+    ${(importer || tel || site) ? `
+      <div class="mr-importer">
+        ${importer ? `<div><strong>יבואן:</strong> ${importer}</div>` : ''}
+        ${tel  ? `<div><strong>טלפון:</strong> <a href="tel:${tel.replace(/\D/g,'')}">${tel}</a></div>` : ''}
+        ${site ? `<div><strong>אתר ריקול:</strong> <a href="${/^https?:/.test(site)?site:'https://'+site.toLowerCase()}" target="_blank" rel="noopener">${site}</a></div>` : ''}
+      </div>` : ''}
+    <div class="mr-list">${items}</div>
+    <div class="mr-note"><i class="fa-solid fa-circle-info"></i> רשימה זו מציגה ריקולים שנפתחו לדגם — לא בהכרח כולם רלוונטיים לרכב ספציפי שלך. ייתכן שכבר טופלו.</div>
+  `;
+}
+
+function openModelRecallsModal() {
+  if (!_modelRecallsCache) return;
+  const body = document.getElementById('modelRecallsModalBody');
+  if (body) body.innerHTML = modelRecallsHTML(_modelRecallsCache);
+  document.getElementById('modelRecallsModal').style.display = 'flex';
+  setModalOpen(true);
+}
+
+function closeModelRecallsModal() {
+  document.getElementById('modelRecallsModal').style.display = 'none';
+  setModalOpen(false);
+}
+
+// ─── Emission-reduction filter (retrofit) ──────────────────
+const CKAN_EMISSION_FILTER = '7cb2bd95-bf2e-49b6-aea1-fcb5ff6f0473';
+
+async function fetchEmissionFilter(plate) {
+  const wrap = document.getElementById('envExtraRows');
+  if (wrap) wrap.innerHTML = '';
+  if (!plate) return;
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_EMISSION_FILTER}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success || !d.result?.records?.length) return;
+    const r = d.result.records[0];
+
+    const installDate = r.taarich_hatkana ? fDate(r.taarich_hatkana) : null;
+    if (!wrap) return;
+
+    wrap.innerHTML = `
+      <div class="data-row">
+        <span class="data-label">מסנן מזהמים</span>
+        <span class="data-value" style="color: var(--green); font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-circle-check"></i> מותקן
+        </span>
+      </div>
+      ${installDate ? `<div class="data-row">
+        <span class="data-label">מועד התקנת המסנן</span>
+        <span class="data-value">${installDate}</span>
+      </div>` : ''}`;
+
+    // Ensure the env section is visible even if vehicle specs were empty
+    const sec = document.getElementById('envSection');
+    if (sec) sec.style.display = 'block';
+  } catch (_) {}
+}
+
+// ─── Per-plate extras (towing hitch, tire load/speed codes) ──
+// Dataset: private + commercial vehicles, includes grira_nm and tire codes
+const CKAN_VEHICLE_EXTRAS = '0866573c-40cd-4ca8-91d2-9dd2d7a492e5';
+
+async function fetchVehicleExtras(plate) {
+  const wrap = document.getElementById('vehicleExtraRows');
+  if (wrap) wrap.innerHTML = '';
+  if (!plate) return;
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_VEHICLE_EXTRAS}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (!d.success || !d.result?.records?.length) return;
+    const r = d.result.records[0];
+
+    const rows = [];
+    const grira = (r.grira_nm || '').toString().trim();
+    if (grira) rows.push(['וו גרירה', grira]);
+
+    if (r.kod_omes_tzmig_kidmi || r.kod_mehirut_tzmig_kidmi) {
+      const front = [r.kod_omes_tzmig_kidmi, r.kod_mehirut_tzmig_kidmi].filter(Boolean).join(' ');
+      if (front) rows.push(['קוד צמיג קדמי (עומס/מהירות)', front]);
+    }
+    if (r.kod_omes_tzmig_ahori || r.kod_mehirut_tzmig_ahori) {
+      const back = [r.kod_omes_tzmig_ahori, r.kod_mehirut_tzmig_ahori].filter(Boolean).join(' ');
+      if (back) rows.push(['קוד צמיג אחורי (עומס/מהירות)', back]);
+    }
+
+    if (rows.length && wrap) {
+      wrap.innerHTML = rows.map(([l, v]) =>
+        `<div class="data-row"><span class="data-label">${l}</span><span class="data-value">${v}</span></div>`
+      ).join('');
+    }
+  } catch (_) {}
+}
+
 // ─── Public vehicles (taxis / buses / share-taxis) ──────────
 const CKAN_PUBLIC_VEHICLES = 'cf29862d-ca25-4691-84f6-1be60dcb4a1e';
 
@@ -1608,12 +1782,15 @@ async function fetchCar() {
     fetchRecalls(raw);
     fetchVehicleSpecs(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
     fetchModelPopulation(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+    fetchEmissionFilter(raw);  // covers both M1 (cars) and M3 (buses)
+    fetchModelRecalls(engBrand, kinuyEn);
     if (!isPublic) {
       // These all assume a private vehicle in the standard registries
       fetchTestHistory(raw);
       fetchOwnershipHistory(raw);
       fetchOffRoad(raw);
       fetchImporterPrice(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+      fetchVehicleExtras(raw);
     }
 
     statusMsg('');
