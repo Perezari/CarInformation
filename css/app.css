@@ -798,6 +798,160 @@
   .safety-feature.feat-yes  { border-color: rgba(34,197,94,0.18); }
   .safety-feature.feat-no   { border-color: rgba(239,68,68,0.15); }
 
+  /* ── Mileage trajectory (actual vs expected) ── */
+  .mile-traj-card {
+    margin-top: 18px;
+    padding: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .mile-traj-head {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+  }
+  .mile-traj-title {
+    font-size: 0.78rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .mile-traj-title i { color: var(--accent); }
+  .mile-traj-verdict {
+    font-size: 0.78rem; font-weight: 700;
+    padding: 3px 10px; border-radius: 100px;
+  }
+  .mile-red    { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+  .mile-accent { background: rgba(232,168,37,0.12); color: var(--accent); border: 1px solid rgba(232,168,37,0.3); }
+  .mile-green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+
+  .mile-bars { display: flex; flex-direction: column; gap: 10px; }
+  .mile-bar-row {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    align-items: center;
+    gap: 12px;
+  }
+  .mile-bar-label {
+    font-size: 0.78rem; font-weight: 700; color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .mile-bar-track {
+    height: 14px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 100px;
+    overflow: hidden;
+    direction: ltr;
+  }
+  [data-theme="light"] .mile-bar-track { background: rgba(0,0,0,0.05); }
+  .mile-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 0.7s cubic-bezier(0.4,0,0.2,1);
+  }
+  .mile-bar-exp {
+    background: linear-gradient(90deg, var(--text-muted), var(--text-dim));
+    opacity: 0.55;
+  }
+  .mile-bar-act {
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+  }
+  .mile-bar-val {
+    font-size: 0.78rem; font-weight: 700; color: var(--text-muted);
+    font-family: 'Heebo', sans-serif;
+    white-space: nowrap;
+  }
+  .mile-traj-foot {
+    margin-top: 14px;
+    font-size: 0.74rem; color: var(--text-muted);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .mile-traj-foot i { color: var(--accent); }
+
+  @media (max-width: 540px) {
+    .mile-bar-row { grid-template-columns: 64px 1fr auto; gap: 8px; }
+    .mile-bar-label { font-size: 0.72rem; }
+    .mile-bar-val { font-size: 0.74rem; }
+  }
+
+  /* ── Population comparison ── */
+  .pop-summary {
+    display: flex; align-items: baseline; gap: 12px;
+    padding-bottom: 16px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pop-count    { font-size: 2.2rem; font-weight: 900; color: var(--accent); line-height: 1; }
+  .pop-count-lbl{ font-size: 0.85rem; color: var(--text-muted); }
+
+  .pop-block { margin-bottom: 18px; }
+  .pop-block:last-child { margin-bottom: 0; }
+  .pop-block-title {
+    font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .pop-bars { display: flex; flex-direction: column; gap: 7px; }
+  .pop-bar {
+    display: flex;
+    align-items: center; gap: 10px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  /* DOM order: dot, label, track, pct → in RTL visually:
+     dot rightmost (aligned across rows), label, track (fills), pct leftmost */
+  .pop-bar > .pop-color-dot { flex-shrink: 0; order: 0; }
+  .pop-bar > .pop-bar-label { flex-shrink: 0; order: 1; min-width: 60px; }
+  .pop-bar > .pop-bar-track { flex: 1 1 auto; min-width: 60px; order: 2; }
+  .pop-bar > .pop-bar-pct   { flex-shrink: 0; order: 3; }
+  .pop-bar-user {
+    border-color: var(--accent);
+    background: rgba(232,168,37,0.06);
+    box-shadow: 0 0 0 1px rgba(232,168,37,0.15);
+  }
+  .pop-bar-track {
+    grid-column: 1; grid-row: 1;
+    height: 8px; background: rgba(255,255,255,0.04);
+    border-radius: 100px; overflow: hidden;
+    direction: ltr;
+  }
+  [data-theme="light"] .pop-bar-track { background: rgba(0,0,0,0.05); }
+  .pop-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 100px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .pop-bar-user .pop-bar-fill {
+    background: linear-gradient(90deg, #fde08a, var(--accent));
+  }
+  .pop-bar-label {
+    font-size: 0.85rem; font-weight: 700; color: var(--text);
+    white-space: nowrap;
+  }
+  .pop-bar-label i { color: var(--accent); margin-right: 4px; font-size: 0.8rem; }
+  .pop-color-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-active);
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+  .pop-bar-pct {
+    font-size: 0.82rem; font-weight: 800; color: var(--accent);
+    font-family: 'Heebo', sans-serif;
+    min-width: 40px; text-align: left;
+  }
+  .pop-bar:not(.pop-bar-user) .pop-bar-pct { color: var(--text-dim); }
+
+  .pop-note {
+    margin-top: 14px; padding: 8px 12px;
+    background: var(--surface2); border-radius: 8px;
+    font-size: 0.72rem; color: var(--text-muted);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .pop-note i { color: var(--accent); }
+
   /* ── Compare cars ── */
   .compare-launch-btn {
     display: inline-flex; align-items: center; gap: 7px;

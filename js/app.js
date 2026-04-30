@@ -214,6 +214,9 @@ function renderVehicleHistory(records, plate) {
   const engine      = r.mispar_manoa ?? null;
   const regDate     = r.rishum_rishon_dt ?? r.tariph_rischum ?? null;
 
+  // Render mileage trajectory chart (actual vs expected)
+  renderMileageTrajectory(mileage, regDate || tlData.base?.c?.moed_aliya_lakvish);
+
   // Update avg km/year insight chip
   const avg = avgKmPerYear(mileage, regDate || tlData.base?.c?.moed_aliya_lakvish);
   const cat = categorizeKmPerYear(avg);
@@ -408,6 +411,210 @@ function renderRecalls(records) {
       <span style="font-size:0.88rem;font-weight:700;color:var(--red);">⚠️ נמצאו ${records.length} ריקולים שלא בוצעו לרכב זה</span>
     </div>
     <div>${rows}</div>`;
+}
+
+// ─── Population comparison: same year + model ────────────────
+const ISRAELI_AVG_KM_PER_YEAR = 15000;
+
+// Map Hebrew color names from gov.il registry to display swatches
+const HEB_COLOR_HEX = {
+  'לבן':       '#f5f5f5',
+  'שנהב לבן':  '#f5efd7',
+  'שמנת':      '#fff8dc',
+  "בז'":       '#d4b996',
+  'בז':        '#d4b996',
+  'שחור':      '#1a1a1a',
+  'כסף':       '#c0c0c0',
+  'כסוף':      '#c0c0c0',
+  'כסוף כהה':  '#9a9a9a',
+  'אפור':      '#808080',
+  'אפור כהה':  '#5a5a5a',
+  'אפור בהיר': '#b8b8b8',
+  'כחול':      '#1e3a8a',
+  'כחול כהה':  '#0c1f5c',
+  'כחול בהיר': '#3b82f6',
+  'תכלת':      '#7dd3fc',
+  'אדום':      '#dc2626',
+  'אדום כהה':  '#991b1b',
+  'בורדו':     '#7f1d1d',
+  'ירוק':      '#16a34a',
+  'ירוק כהה':  '#166534',
+  'זית':       '#7c8a3b',
+  'צהוב':      '#facc15',
+  'זהב':       '#d4af37',
+  'חום':       '#7c2d12',
+  'חום כהה':   '#451a03',
+  'ברונזה':    '#a16207',
+  'כתום':      '#ea580c',
+  'תפוז':      '#fb923c',
+  'ורוד':      '#ec4899',
+  'סגול':      '#9333ea',
+};
+function colorNameToHex(name) {
+  if (!name) return null;
+  const n = name.trim();
+  if (HEB_COLOR_HEX[n]) return HEB_COLOR_HEX[n];
+  // longest-prefix fallback for compounds like "כחול מטאלי"
+  let best = null;
+  for (const key of Object.keys(HEB_COLOR_HEX)) {
+    if (n.includes(key) && (!best || key.length > best.length)) best = key;
+  }
+  return best ? HEB_COLOR_HEX[best] : null;
+}
+
+async function fetchModelPopulation(tozeret_cd, degem_cd, year) {
+  const sec = document.getElementById('popSection');
+  if (sec) sec.style.display = 'none';
+  if (!tozeret_cd || !degem_cd || !year) return;
+
+  try {
+    const filters = encodeURIComponent(JSON.stringify({
+      tozeret_cd: Number(tozeret_cd),
+      degem_cd:   Number(degem_cd),
+      shnat_yitzur: Number(year),
+    }));
+    const base = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${filters}`;
+
+    // Fetch full population (CKAN returns up to limit per request; paginate if needed)
+    const PAGE = 10000;
+    let offset = 0, total = 0, records = [];
+    while (true) {
+      const res = await fetch(`${base}&limit=${PAGE}&offset=${offset}`);
+      const d   = await res.json();
+      if (!d.success) break;
+      total = d.result?.total || 0;
+      const page = d.result?.records || [];
+      records = records.concat(page);
+      offset += page.length;
+      if (page.length < PAGE || offset >= total) break;
+    }
+    if (total < 5) return; // not enough to be meaningful
+    renderModelPopulation(records, total);
+  } catch (_) {}
+}
+
+function renderModelPopulation(records, total) {
+  const sec  = document.getElementById('popSection');
+  const body = document.getElementById('popBody');
+  if (!sec || !body) return;
+
+  // Aggregate colors / trims / ownership
+  const tally = (key) => {
+    const map = new Map();
+    for (const r of records) {
+      const v = (r[key] || '').toString().trim();
+      if (!v) continue;
+      map.set(v, (map.get(v) || 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  };
+
+  const sample  = records.length;
+  const colors  = tally('tzeva_rechev').slice(0, 5);
+  const trims   = tally('ramat_gimur').slice(0, 5);
+  const owners  = tally('baalut').slice(0, 4);
+
+  // Highlight the user's car attributes
+  const userColor = document.getElementById('qColor')?.textContent?.trim();
+  const userTrim  = document.getElementById('carTrim')?.textContent?.trim();
+
+  const bar = ([label, n], userVal, swatchHex) => {
+    const pct = Math.round(n / sample * 100);
+    const isUser = userVal && label === userVal;
+    // Dot lives in its own grid cell so dots line up vertically across rows;
+    // for rows without a swatch (trims/owners) we render a transparent placeholder.
+    const dotStyle = swatchHex
+      ? `background:${swatchHex}`
+      : 'background:transparent;border-color:transparent';
+    return `
+      <div class="pop-bar ${isUser ? 'pop-bar-user' : ''} ${swatchHex ? '' : 'pop-bar-no-dot'}">
+        <span class="pop-color-dot" style="${dotStyle}"></span>
+        <div class="pop-bar-label">${label}${isUser ? ' <i class="fa-solid fa-circle-user" title="הרכב שלך"></i>' : ''}</div>
+        <div class="pop-bar-track"><div class="pop-bar-fill" style="width:${pct}%"></div></div>
+        <div class="pop-bar-pct">${pct}%</div>
+      </div>`;
+  };
+
+  body.innerHTML = `
+    <div class="pop-summary">
+      <div class="pop-count">${total.toLocaleString('he-IL')}</div>
+      <div class="pop-count-lbl">רכבים מאותו דגם ושנת ייצור פעילים כיום במאגר</div>
+    </div>
+    ${colors.length ? `
+      <div class="pop-block">
+        <div class="pop-block-title">צבעים נפוצים</div>
+        <div class="pop-bars">${colors.map(c => bar(c, userColor, colorNameToHex(c[0]))).join('')}</div>
+      </div>` : ''}
+    ${trims.length > 1 ? `
+      <div class="pop-block">
+        <div class="pop-block-title">רמות גימור נפוצות</div>
+        <div class="pop-bars">${trims.map(t => bar(t, userTrim)).join('')}</div>
+      </div>` : ''}
+    ${owners.length ? `
+      <div class="pop-block">
+        <div class="pop-block-title">סוגי בעלות</div>
+        <div class="pop-bars">${owners.map(o => bar(o, '')).join('')}</div>
+      </div>` : ''}
+    <div class="pop-note"><i class="fa-solid fa-circle-info"></i> מבוסס על כל הרכבים הפעילים כיום ברישום (לא כולל רכבים שהורדו מהכביש)</div>
+  `;
+  sec.style.display = 'block';
+}
+
+// ─── Mileage trajectory chart (actual vs expected) ───────────
+function renderMileageTrajectory(actualKm, regDateStr) {
+  const wrap = document.getElementById('mileageTrajectory');
+  if (!wrap) return;
+  const km   = Number(actualKm);
+  const reg  = new Date(regDateStr);
+  if (!km || isNaN(reg)) { wrap.innerHTML = ''; return; }
+
+  const yearsOnRoad = (Date.now() - reg) / (365.25 * 24 * 3600 * 1000);
+  if (yearsOnRoad < 0.3) { wrap.innerHTML = ''; return; }
+
+  const expected = Math.round(yearsOnRoad * ISRAELI_AVG_KM_PER_YEAR);
+  const pct = Math.round((km - expected) / expected * 100);
+  const verdictCls = pct > 10 ? 'red' : pct < -10 ? 'green' : 'accent';
+  const verdictTxt = pct > 10
+    ? `${pct}% מעל הממוצע — נסועה גבוהה`
+    : pct < -10
+      ? `${Math.abs(pct)}% מתחת לממוצע — נסועה נמוכה`
+      : `קרוב לממוצע (${pct >= 0 ? '+' : ''}${pct}%)`;
+
+  // Two horizontal bars on a shared scale (max value = 100%)
+  const max = Math.max(km, expected);
+  const expWidth = (expected / max) * 100;
+  const actWidth = (km       / max) * 100;
+  const yearsTxt = yearsOnRoad < 1
+    ? `${Math.round(yearsOnRoad * 12)} חודשים`
+    : `${yearsOnRoad.toFixed(1)} שנים`;
+
+  wrap.innerHTML = `
+    <div class="mile-traj-card">
+      <div class="mile-traj-head">
+        <div class="mile-traj-title"><i class="fa-solid fa-route"></i> מסלול נסועה לעומת הממוצע</div>
+        <div class="mile-traj-verdict mile-${verdictCls}">${verdictTxt}</div>
+      </div>
+      <div class="mile-bars">
+        <div class="mile-bar-row">
+          <div class="mile-bar-label">ממוצע צפוי</div>
+          <div class="mile-bar-track">
+            <div class="mile-bar-fill mile-bar-exp" style="width:${expWidth.toFixed(1)}%"></div>
+          </div>
+          <div class="mile-bar-val">${expected.toLocaleString('he-IL')} ק"מ</div>
+        </div>
+        <div class="mile-bar-row">
+          <div class="mile-bar-label">בפועל</div>
+          <div class="mile-bar-track">
+            <div class="mile-bar-fill mile-bar-act" style="width:${actWidth.toFixed(1)}%"></div>
+          </div>
+          <div class="mile-bar-val">${km.toLocaleString('he-IL')} ק"מ</div>
+        </div>
+      </div>
+      <div class="mile-traj-foot">
+        <i class="fa-solid fa-circle-info"></i>
+        בהנחת ${ISRAELI_AVG_KM_PER_YEAR.toLocaleString('he-IL')} ק"מ/שנה לאורך ${yearsTxt} על הכביש
+      </div>
+    </div>`;
 }
 
 // ─── Vehicle specs (environment + safety + tech + comfort) ───
@@ -1157,12 +1364,13 @@ async function fetchCar() {
     initHealthScore(c);
     tlData.base = { c }; tryRenderTimeline();
 
-    // ── Test history + mileage + ownership + off-road + recalls + specs (async, non-blocking) ──
+    // ── Test history + mileage + ownership + off-road + recalls + specs + population (async, non-blocking) ──
     fetchTestHistory(raw);
     fetchOwnershipHistory(raw);
     fetchOffRoad(raw);
     fetchRecalls(raw);
     fetchVehicleSpecs(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+    fetchModelPopulation(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
