@@ -222,6 +222,7 @@ function renderVehicleHistory(records, plate) {
     setHtml('qAvgKm', `${avg.toLocaleString('he-IL')} ק"מ <span class="km-cat-badge km-cat-${cat.cls}">${cat.label}</span>`);
     if (avgChip) avgChip.className = 'stat-chip ' + cat.cls;
     updateHistorySnapshot(plate, { avgKm: avg });
+    tryRenderFuelCost(avg);
   } else {
     set('qAvgKm', '—');
     if (avgChip) avgChip.className = 'stat-chip';
@@ -409,14 +410,54 @@ function renderRecalls(records) {
     <div>${rows}</div>`;
 }
 
-// ─── Vehicle specs (environment + safety) ────────────────────
+// ─── Vehicle specs (environment + safety + tech + comfort) ───
 const CKAN_VEHICLE_SPECS = '142afde2-6228-49f9-8a29-9b6c3a0cbe40';
 
+// Cached so renderVehicleHistory can compute fuel cost when km arrives later
+let _currentSpecs = null;
+
+// Israeli fuel prices (NIS/L, 2024 approximate — update annually)
+const FUEL_PRICE_NIS = { petrol: 7.5, diesel: 7.0 };
+
+function estimateAnnualFuelCost(specs, avgKmPerYear) {
+  if (!specs || !avgKmPerYear) return null;
+  const co2 = Number(specs.CO2_WLTP || specs.kamut_CO2);
+  if (!co2 || co2 <= 0) return null;
+  const fuelType = (specs.delek_nm || '').toString();
+  if (/חשמל/.test(fuelType)) return null; // EVs don't burn fuel
+  const isDiesel = /דיזל|סולר/.test(fuelType);
+  // Approximate: petrol L/100km ≈ CO2 / 23.2, diesel ≈ CO2 / 26.5
+  const lPer100 = isDiesel ? co2 / 26.5 : co2 / 23.2;
+  const price = isDiesel ? FUEL_PRICE_NIS.diesel : FUEL_PRICE_NIS.petrol;
+  return Math.round((avgKmPerYear / 100) * lPer100 * price);
+}
+
+function tryRenderFuelCost(avgKm) {
+  if (!_currentSpecs) return;
+  const km = avgKm || (() => {
+    const plate = document.getElementById('stolenRaw')?.value;
+    return getHistory().find(x => x.plate === plate)?.snapshot?.avgKm;
+  })();
+  const cost = estimateAnnualFuelCost(_currentSpecs, km);
+  const row = document.getElementById('rowFuelCost');
+  if (cost && row) {
+    row.querySelector('.data-value').textContent = `₪${cost.toLocaleString('he-IL')}`;
+    row.style.display = '';
+  } else if (row) {
+    row.style.display = 'none';
+  }
+}
+
 async function fetchVehicleSpecs(tozeret_cd, degem_cd, year) {
-  const envSection    = document.getElementById('envSection');
-  const safetySection = document.getElementById('safetySection');
-  if (envSection)    envSection.style.display    = 'none';
-  if (safetySection) safetySection.style.display = 'none';
+  _currentSpecs = null;
+  const envSection     = document.getElementById('envSection');
+  const safetySection  = document.getElementById('safetySection');
+  const comfortSection = document.getElementById('comfortSection');
+  const techExtras     = document.getElementById('techExtraRows');
+  if (envSection)     envSection.style.display     = 'none';
+  if (safetySection)  safetySection.style.display  = 'none';
+  if (comfortSection) comfortSection.style.display = 'none';
+  if (techExtras)     techExtras.innerHTML         = '';
   if (!tozeret_cd || !degem_cd) return;
 
   try {
@@ -465,7 +506,9 @@ function buildScale(min, max, current, lowIsGood) {
 }
 
 function renderVehicleSpecs(s) {
-  // ── Environment section ──
+  _currentSpecs = s;
+
+  // ── Environment section (with emissions B) ──
   const envSection = document.getElementById('envSection');
   const envBody    = document.getElementById('envBody');
   if (envSection && envBody) {
@@ -485,6 +528,17 @@ function renderVehicleSpecs(s) {
     const mamir = (s.sug_mamir_nm || '').trim();
     if (mamir && !/לא ידוע/.test(mamir)) {
       html += `<div class="data-row"><span class="data-label">סוג ממיר</span><span class="data-value">${mamir}</span></div>`;
+    }
+    // Emissions (B)
+    const co2 = s.CO2_WLTP || s.kamut_CO2;
+    if (co2 != null) {
+      html += `<div class="data-row"><span class="data-label">פליטות CO₂</span><span class="data-value">${co2} גרם/ק"מ</span></div>`;
+    }
+    if (s.NOX_WLTP != null) {
+      html += `<div class="data-row"><span class="data-label">פליטות NOₓ</span><span class="data-value">${s.NOX_WLTP} מ"ג/ק"מ</span></div>`;
+    }
+    if (s.PM_WLTP != null) {
+      html += `<div class="data-row"><span class="data-label">פליטות חלקיקים PM</span><span class="data-value">${s.PM_WLTP} מ"ג/ק"מ</span></div>`;
     }
     if (html) {
       envBody.innerHTML = html;
@@ -529,6 +583,80 @@ function renderVehicleSpecs(s) {
     if (html) {
       safetyBody.innerHTML = html;
       safetySection.style.display = 'block';
+    }
+  }
+
+  // ── Technical extras (A) + Towing (C) + Fuel cost (F) ──
+  const techExtras = document.getElementById('techExtraRows');
+  if (techExtras) {
+    const rows = [];
+    const fmtNum  = v => (v != null && v !== '' && Number(v) !== 0) ? Number(v).toLocaleString('he-IL') : null;
+    const yesNo   = v => Number(v) === 1 ? 'כן' : (v != null ? 'לא' : null);
+
+    if (fmtNum(s.nefah_manoa))         rows.push(['נפח מנוע',         `${fmtNum(s.nefah_manoa)} סמ"ק`]);
+    if (fmtNum(s.koah_sus))            rows.push(['כוח סוס',          `${fmtNum(s.koah_sus)} כ"ס`]);
+    if (s.automatic_ind != null)       rows.push(['תיבת הילוכים',     Number(s.automatic_ind) === 1 ? 'אוטומטית' : 'ידנית']);
+    const drive = (s.technologiat_hanaa_nm || '').trim();
+    if (drive && !/לא ידוע/.test(drive) && drive !== 'הנעה רגילה')
+                                       rows.push(['טכנולוגיית הנעה', drive]);
+    const merkav = (s.merkav || '').trim();
+    if (merkav && !/לא ידוע/.test(merkav)) rows.push(['מבנה',          merkav]);
+    if (fmtNum(s.mispar_dlatot))       rows.push(['מספר דלתות',       fmtNum(s.mispar_dlatot)]);
+    if (fmtNum(s.mispar_moshavim))     rows.push(['מספר מושבים',      fmtNum(s.mispar_moshavim)]);
+    if (fmtNum(s.mispar_kariot_avir))  rows.push(['כריות אוויר',      fmtNum(s.mispar_kariot_avir)]);
+    if (fmtNum(s.mishkal_kolel))       rows.push(['משקל כולל',        `${fmtNum(s.mishkal_kolel)} ק"ג`]);
+    // Towing (C)
+    if (fmtNum(s.kosher_grira_im_blamim))
+                                       rows.push(['כושר גרירה (עם בלמים)',  `${fmtNum(s.kosher_grira_im_blamim)} ק"ג`]);
+    if (fmtNum(s.kosher_grira_bli_blamim))
+                                       rows.push(['כושר גרירה (ללא בלמים)', `${fmtNum(s.kosher_grira_bli_blamim)} ק"ג`]);
+
+    let html = rows.map(([l, v]) =>
+      `<div class="data-row"><span class="data-label">${l}</span><span class="data-value">${v}</span></div>`
+    ).join('');
+    // Fuel cost row (F) — rendered with placeholder; updated when avgKm is known
+    html += `<div class="data-row" id="rowFuelCost" style="display:none">
+      <span class="data-label">צריכת דלק שנתית משוערת</span>
+      <span class="data-value">—</span>
+    </div>`;
+    techExtras.innerHTML = html;
+
+    // Try computing fuel cost now (avgKm may already be in snapshot from prior session)
+    tryRenderFuelCost();
+  }
+
+  // ── Comfort & equipment (E) ──
+  const comfortSection = document.getElementById('comfortSection');
+  const comfortBody    = document.getElementById('comfortBody');
+  if (comfortSection && comfortBody) {
+    const items = [
+      ['mazgan_ind',                          'מזגן'],
+      ['abs_ind',                             'מערכת ABS'],
+      ['hege_koah_ind',                       'היגוי כוח'],
+      ['bakarat_yatzivut_ind',                'בקרת יציבות'],
+      ['galgaley_sagsoget_kala_ind',          'גלגלי סגסוגת'],
+      ['halon_bagg_ind',                      'גג נפתח'],
+      ['argaz_ind',                           'וו גרירה'],
+      ['hayshaney_lahatz_avir_batzmigim_ind', 'חיישני לחץ אוויר בצמיגים'],
+      ['hayshaney_hagorot_ind',               'חיישני חגורות בטיחות'],
+      ['alco_lock',                           'נעילת אלכוהול'],
+    ];
+    const rows = items.filter(([k]) => s[k] != null);
+    // Power windows: count > 0 means yes
+    if (s.mispar_halonot_hashmal != null) {
+      rows.push(['_powerWindows', `חלונות חשמל${Number(s.mispar_halonot_hashmal) > 0 ? ` (${s.mispar_halonot_hashmal})` : ''}`, Number(s.mispar_halonot_hashmal) > 0 ? 1 : 0]);
+    }
+    if (rows.length) {
+      const html = rows.map(item => {
+        const [k, label, presetVal] = item;
+        const val = presetVal != null ? presetVal : s[k];
+        const has = Number(val) === 1;
+        const cls  = has ? 'feat-yes' : 'feat-no';
+        const icon = has ? 'fa-circle-check' : 'fa-circle-xmark';
+        return `<div class="safety-feature ${cls}"><i class="fa-solid ${icon}"></i><span>${label}</span></div>`;
+      }).join('');
+      comfortBody.innerHTML = `<div class="safety-features">${html}</div>`;
+      comfortSection.style.display = 'block';
     }
   }
 }
@@ -987,7 +1115,7 @@ async function fetchCar() {
     const fee = estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur);
     const feeChip = document.getElementById('chipFee');
     if (fee) {
-      set('qFee', `₪${fee.toLocaleString('he-IL')}`);
+      setHtml('qFee', `₪${fee.toLocaleString('he-IL')} <a href="https://www.gov.il/he/service/calculate-vehicle-license-fee" target="_blank" rel="noopener" class="fee-info" title="המחיר משוער. לחץ למחשבון הרשמי של משרד התחבורה">*</a>`);
       feeChip.classList.add('accent');
     } else {
       set('qFee', '—');

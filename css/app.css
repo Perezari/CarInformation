@@ -452,6 +452,18 @@
   .stat-chip.red { border-color: rgba(239,68,68,0.25); background: rgba(239,68,68,0.06); }
   .stat-chip.red .value { color: var(--red); }
 
+  /* Approximate-value asterisk linking to official calculator */
+  .fee-info {
+    display: inline-block;
+    margin-right: 4px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-decoration: none;
+    cursor: help;
+    transition: color 0.15s;
+  }
+  .fee-info:hover { color: var(--accent); }
+
   /* Inline category badge inside stat-chip values (e.g. high/avg/low) */
   .km-cat-badge {
     display: inline-block; margin-right: 6px;
