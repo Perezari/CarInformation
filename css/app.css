@@ -401,9 +401,19 @@
   }
   /* ── Car Info ── */
   .car-info { padding: 28px 28px 28px 28px; display: flex; flex-direction: column; justify-content: center; gap: 0; }
-  .car-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .car-brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
   .brand-logo { width: 40px; height: 40px; object-fit: contain; filter: brightness(0) invert(1); opacity: 0.85; }
   .car-make { font-size: 0.75rem; color: var(--accent); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .public-vehicle-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(232,168,37,0.12);
+    border: 1px solid rgba(232,168,37,0.35);
+    color: var(--accent);
+    border-radius: 100px;
+    padding: 4px 12px;
+    font-size: 0.78rem; font-weight: 700;
+    margin-right: auto;
+  }
 
   /* Model + plate on same row */
   .car-model-row {
@@ -496,6 +506,10 @@
 
   .data-row { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .data-row:last-child { border-bottom: none; padding-bottom: 0; }
+  /* When public-vehicle extras are inserted before the regular rows, restore
+     the bottom border on the last extra row so it visually connects to the
+     row below it instead of looking detached */
+  #publicVehicleExtras .data-row:last-child { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
   .data-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
   .data-value { font-size: 0.9rem; color: var(--text); font-weight: 600; text-align: left; max-width: 55%; }
 

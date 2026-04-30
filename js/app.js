@@ -1056,6 +1056,32 @@ function openStolenCheck() {
   window.open('https://www.gov.il/apps/police/stolencar', '_blank');
 }
 
+// ─── Public vehicles (taxis / buses / share-taxis) ──────────
+const CKAN_PUBLIC_VEHICLES = 'cf29862d-ca25-4691-84f6-1be60dcb4a1e';
+
+// Map sug_rechev_cd → emoji + short label for the prominent badge
+function publicVehicleType(cd, nm) {
+  const code = Number(cd);
+  if (code === 121)                  return { icon: '🚖', label: 'מונית' };
+  if (code === 124)                  return { icon: '🚖', label: 'מונית נגישה' };
+  if (code === 150)                  return { icon: '🚐', label: 'מונית-זוטובוס' };
+  if ([622,623,624].includes(code))  return { icon: '🚐', label: nm || 'אוטובוס זעיר' };
+  if (code === 650)                  return { icon: '🚌', label: 'טיולית' };
+  if (code >= 611 && code <= 630)    return { icon: '🚌', label: nm || 'אוטובוס' };
+  return { icon: '🚗', label: nm || 'רכב ציבורי' };
+}
+
+async function fetchPublicVehicle(plate) {
+  try {
+    const filters = encodeURIComponent(JSON.stringify({ mispar_rechev: Number(plate) }));
+    const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=${CKAN_PUBLIC_VEHICLES}&filters=${filters}&limit=1`;
+    const res = await fetch(url);
+    const d   = await res.json();
+    if (d.success && d.result?.records?.length) return d.result.records[0];
+  } catch (_) {}
+  return null;
+}
+
 // ─── Utilities ───────────────────────────────────────────────
 function fDate(s) {
   if (!s) return '—';
@@ -1171,7 +1197,15 @@ function tryRenderTimeline() {
   if (!tlData.base) return;
   const { c } = tlData.base;
   const events = [];
-  const fmtDt = s => { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d; };
+  // Parse to LOCAL time so that owner-month and road-month dates compare equal
+  // when they share the same year+month (UTC parsing of "YYYY-MM" was offsetting them)
+  const fmtDt = s => {
+    if (!s) return null;
+    const m = String(s).match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+    if (m) return new Date(+m[1], +m[2] - 1, +(m[3] || 1));
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  };
   const fmt     = d => d ? d.toLocaleDateString('he-IL', { month:'2-digit', year:'numeric' }) : null;
   const fmtFull = d => d ? d.toLocaleDateString('he-IL', { day:'2-digit', month:'2-digit', year:'numeric' }) : null;
 
@@ -1217,7 +1251,10 @@ function tryRenderTimeline() {
   if (licDate) events.push({ type:'ev-license', date: licDate, label: licDate > new Date() ? 'תוקף רישיון' : 'רישיון פג תוקף', sub: fmt(licDate) });
 
   events.push({ type:'ev-today', date: new Date(), label:'היום', sub: fmtFull(new Date()) });
-  events.sort((a,b) => a.date - b.date);
+  // When dates tie (typical: road entry & first owner in the same month), order
+  // events by their natural chronology in vehicle life
+  const TYPE_ORDER = { 'ev-birth':1, 'ev-road':2, 'ev-owner':3, 'ev-test':4, 'ev-recall':5, 'ev-license':6, 'ev-today':7 };
+  events.sort((a, b) => (a.date - b.date) || ((TYPE_ORDER[a.type]||9) - (TYPE_ORDER[b.type]||9)));
 
   const el = document.getElementById('timelineBody');
   if (!el) return;
@@ -1372,14 +1409,62 @@ async function fetchCar() {
   logo.style.display = 'none';
   logo.src = '';
 
+  // Reset cross-search UI state — sections we skip for some vehicle types must
+  // not retain content from the previous search
+  ['publicBadge', 'priceSection', 'offRoadBanner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const kmSec = document.getElementById('kmSection');
+  const ownSec = document.getElementById('ownershipSection');
+  if (kmSec)  kmSec.style.display  = '';
+  if (ownSec) ownSec.style.display = '';
+
   try {
     const apiUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&q=${raw}`;
     const res = await fetch(apiUrl);
     const data = await res.json();
 
-    if (!data.success || !data.result.records.length) throw new Error('not found');
+    let c, isPublic = false;
+    if (data.success && data.result.records.length) {
+      c = data.result.records[0];
+    } else {
+      // Fall back to public-vehicle registry (taxis / buses / share-taxis)
+      const pub = await fetchPublicVehicle(raw);
+      if (!pub) throw new Error('not found');
+      isPublic = true;
+      c = {
+        mispar_rechev:    pub.mispar_rechev,
+        tozeret_cd:       pub.tozeret_cd,
+        tozeret_nm:       pub.tozeret_nm,
+        degem_cd:         pub.degem_cd,
+        degem_nm:         pub.degem_nm,
+        shnat_yitzur:     pub.shnat_yitzur,
+        tzeva_cd:         pub.tzeva_cd,
+        tzeva_rechev:     pub.tzeva_rechev,
+        tokef_dt:         pub.tokef_dt,
+        // Don't fall back to degem_nm so we don't show identical model+kinuy rows
+        kinuy_mishari:    pub.kinuy_mishari || null,
+        // Public vehicles don't have a trim concept — leave empty
+        ramat_gimur:      null,
+        baalut:           'ציבורי',
+        _isPublic:        true,
+        _publicType:      { cd: pub.sug_rechev_cd, nm: pub.sug_rechev_nm },
+        _seats:           pub.mispar_mekomot,
+        _seatsNextDriver: pub.mispar_mekomot_leyd_nahag,
+        _totalWeight:     pub.mishkal_kolel,
+      };
 
-    const c = data.result.records[0];
+      // Show the public badge + hide private-only sections
+      const pubBadge = document.getElementById('publicBadge');
+      if (pubBadge) {
+        const t = publicVehicleType(c._publicType.cd, c._publicType.nm);
+        pubBadge.innerHTML = `<span>${t.icon}</span><span>${t.label}</span>`;
+        pubBadge.style.display = 'inline-flex';
+      }
+      if (kmSec)  kmSec.style.display  = 'none';
+      if (ownSec) ownSec.style.display = 'none';
+    }
 
     // Build names
     const makeHeb = c.tozeret_nm || '';
@@ -1391,7 +1476,29 @@ async function fetchCar() {
     set('plateTxt', fPlate(c.mispar_rechev));
     set('carMake', makeHeb);
     set('carModel', modelHeb || makeHeb);
-    set('carTrim', c.ramat_gimur || '');
+    const publicExtras = document.getElementById('publicVehicleExtras');
+    if (c._isPublic) {
+      const t = publicVehicleType(c._publicType.cd, c._publicType.nm);
+      const parts = [t.label];
+      if (c._seats) parts.push(`${c._seats} מקומות`);
+      set('carTrim', parts.join(' · '));
+
+      // Public-specific rows pinned to the top of "פרטי הרכב"
+      if (publicExtras) {
+        const rows = [];
+        rows.push(`<div class="data-row"><span class="data-label">סוג כלי רכב</span><span class="data-value">${t.icon} ${t.label}</span></div>`);
+        if (c._seats != null)
+          rows.push(`<div class="data-row"><span class="data-label">מקומות ישיבה</span><span class="data-value">${c._seats}</span></div>`);
+        if (c._seatsNextDriver != null && Number(c._seatsNextDriver) > 0)
+          rows.push(`<div class="data-row"><span class="data-label">מקומות ליד הנהג</span><span class="data-value">${c._seatsNextDriver}</span></div>`);
+        if (c._totalWeight != null && Number(c._totalWeight) > 0)
+          rows.push(`<div class="data-row"><span class="data-label">משקל כולל</span><span class="data-value">${Number(c._totalWeight).toLocaleString('he-IL')} ק"ג</span></div>`);
+        publicExtras.innerHTML = rows.join('');
+      }
+    } else {
+      set('carTrim', c.ramat_gimur || '');
+      if (publicExtras) publicExtras.innerHTML = '';
+    }
     set('qYear', c.shnat_yitzur);
     set('qFuel', c.sug_delek_nm);
     set('qColor', c.tzeva_rechev);
@@ -1497,14 +1604,17 @@ async function fetchCar() {
     initHealthScore(c);
     tlData.base = { c }; tryRenderTimeline();
 
-    // ── Test history + mileage + ownership + off-road + recalls + specs + population (async, non-blocking) ──
-    fetchTestHistory(raw);
-    fetchOwnershipHistory(raw);
-    fetchOffRoad(raw);
+    // ── Async non-blocking enrichment ──
     fetchRecalls(raw);
     fetchVehicleSpecs(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
     fetchModelPopulation(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
-    fetchImporterPrice(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+    if (!isPublic) {
+      // These all assume a private vehicle in the standard registries
+      fetchTestHistory(raw);
+      fetchOwnershipHistory(raw);
+      fetchOffRoad(raw);
+      fetchImporterPrice(c.tozeret_cd, c.degem_cd, c.shnat_yitzur);
+    }
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';

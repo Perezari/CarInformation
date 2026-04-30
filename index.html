@@ -267,6 +267,7 @@
           <div class="car-brand-row">
             <img id="brandLogo" src="" alt="" style="display:none" class="brand-logo" onerror="this.style.display='none'">
             <span class="car-make" id="carMake">—</span>
+            <span id="publicBadge" class="public-vehicle-badge" style="display:none"></span>
           </div>
 
           <!-- Model name + plate inline -->
@@ -338,6 +339,7 @@
       <!-- פרטי רכב -->
       <div class="data-section">
         <div class="section-title"><i class="fa-solid fa-car"></i> פרטי הרכב</div>
+        <div id="publicVehicleExtras"></div>
         <div class="data-row"><span class="data-label">שם תוצר</span><span class="data-value" id="dMake">—</span></div>
         <div class="data-row"><span class="data-label">שם דגם</span><span class="data-value" id="dModel">—</span></div>
         <div class="data-row"><span class="data-label">כינוי מסחרי</span><span class="data-value" id="dKinuy">—</span></div>
@@ -423,7 +425,7 @@
     </div>
 
     <!-- קילומטרז' והיסטוריית טסטים -->
-    <div class="sections-grid" style="margin-top:16px">
+    <div class="sections-grid" id="kmSection" style="margin-top:16px">
       <div class="km-section">
         <div class="km-header">
           <div class="km-title"><i class="fa-solid fa-gauge-high"></i> קילומטרז' והיסטוריית טסטים</div>
@@ -447,7 +449,7 @@
     </div>
 
     <!-- היסטוריית בעלויות -->
-    <div class="sections-grid" style="margin-top:16px">
+    <div class="sections-grid" id="ownershipSection" style="margin-top:16px">
       <div class="km-section">
         <div class="km-header">
           <div class="km-title"><i class="fa-solid fa-users"></i> היסטוריית בעלויות</div>
