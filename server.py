@@ -3,12 +3,21 @@
 הרצה: python server.py
 פתח:  http://localhost:8080
 """
-import http.server, json, urllib.request, urllib.error, os
+import http.server, json, urllib.request, urllib.error, os, socketserver
 
-PORT = 8080
+PORT = 9000
 GOV_ENDPOINT = "https://www.gov.il/he/api/DataGovProxy/GetDGResults"
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+
+    # Disable browser caching for ALL static files in dev so refresh always
+    # picks up the latest HTML/JS/CSS. Without this, Chrome/Safari aggressively
+    # cache and a regular reload won't see edits — only a full app restart does.
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -64,10 +73,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif not any(x in str(args[0]) for x in ['.js','.css','.ico','.png','.woff']):
             super().log_message(fmt, *args)
 
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
 if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     print(f"\n  Car Lookup Server")
     print(f"  -----------------")
     print(f"  http://localhost:{PORT}/index.html")
     print(f"  Ctrl+C לעצירה\n")
-    http.server.HTTPServer(("", PORT), Handler).serve_forever()
+    ThreadedHTTPServer(("", PORT), Handler).serve_forever()

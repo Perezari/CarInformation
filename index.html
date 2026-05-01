@@ -38,11 +38,31 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<button id="themeToggle" onclick="toggleTheme()" class="theme-toggle"
-        type="button" aria-label="החלף ערכת נושא בהיר/כהה" title="החלף ערכת נושא">
-  <i class="fa-solid fa-sun icon-sun" aria-hidden="true"></i>
-  <i class="fa-solid fa-moon icon-moon" aria-hidden="true"></i>
+<!-- App menu (hamburger) — top-right corner -->
+<button id="appMenuBtn" class="app-menu-btn" type="button"
+        onclick="toggleAppMenu(event)" aria-label="תפריט">
+  <span class="app-menu-bars" aria-hidden="true"><span></span><span></span><span></span></span>
 </button>
+<div id="appMenu" class="app-menu" role="menu">
+  <button class="app-menu-item" id="menuProfileBtn" onclick="closeAppMenu();openMyCarModal()" role="menuitem">
+    <i class="fa-regular fa-star app-menu-icon"></i>
+    <span class="app-menu-label">הפרופיל שלי</span>
+  </button>
+  <button class="app-menu-item" id="menuCompareBtn" onclick="closeAppMenu();openCompareModal()" role="menuitem">
+    <i class="fa-solid fa-scale-balanced app-menu-icon"></i>
+    <span class="app-menu-label">השווה רכבים</span>
+  </button>
+  <button class="app-menu-item" onclick="closeAppMenu();openSourcesModal()" role="menuitem">
+    <i class="fa-solid fa-database app-menu-icon"></i>
+    <span class="app-menu-label">מקורות מידע</span>
+  </button>
+  <div class="app-menu-divider"></div>
+  <button class="app-menu-item app-menu-theme" id="menuThemeBtn" onclick="toggleTheme()" role="menuitem">
+    <i class="fa-solid fa-moon app-menu-icon icon-moon"></i>
+    <i class="fa-solid fa-sun  app-menu-icon icon-sun"></i>
+    <span class="app-menu-label" id="menuThemeLabel">ערכה כהה</span>
+  </button>
+</div>
 <div id="pdf-loader">
   <svg class="car-loader-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <defs>
@@ -143,13 +163,20 @@
         <i class="fa-solid fa-shield-halved"></i>
         מאגר הרכבים הלאומי
       </div>
-      <button class="header-info-btn" onclick="openSourcesModal()" type="button" aria-label="מקורות מידע">
-        <i class="fa-solid fa-circle-info"></i>
-        מקורות מידע
-      </button>
     </div>
     <h1>בדיקת פרטי רכב</h1>
     <p>מידע מלא ממאגרי נתונים.gov.il — הזן מספר רישוי לחיפוש מיידי</p>
+  </div>
+
+  <!-- "Profile" / My-Car modal -->
+  <div id="myCarModal" class="modal-overlay" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-star"></i> הפרופיל שלי</h3>
+        <button class="modal-close" onclick="closeMyCarModal()" aria-label="סגור">×</button>
+      </div>
+      <div class="modal-body" id="myCarModalBody"></div>
+    </div>
   </div>
 
   <!-- Search -->
@@ -182,9 +209,6 @@
     <div class="recent-wrap" id="recentWrap" style="display:none">
       <span class="recent-label">חיפושים אחרונים:</span>
       <div id="recentChips" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center;"></div>
-      <button class="compare-launch-btn" onclick="openCompareModal()" type="button">
-        <i class="fa-solid fa-scale-balanced"></i> השווה רכבים
-      </button>
     </div>
   </div>
 
@@ -294,6 +318,14 @@
             <div class="src-name">חישוב פנימי — ערך משוער היום</div>
             <div class="src-desc">עקומת ירידת ערך מכוילת לפי משרד התחבורה + תיקונים לק"מ ובעלים</div>
           </div>
+          <div class="src-item">
+            <div class="src-name">חישוב פנימי — עלות בעלות שנתית (TCO)</div>
+            <div class="src-desc">סיכום אגרה + דלק + תחזוקה משוערת + ירידת ערך שנתית. לא כולל ביטוח</div>
+          </div>
+          <div class="src-item">
+            <div class="src-name">זיהוי רכבי השכרה / ליסינג</div>
+            <div class="src-desc">סורק את היסטוריית הבעלויות ומסמן רכבים שהיו או נמצאים בצי השכרה/ליסינג</div>
+          </div>
         </div>
 
         <div class="src-section">
@@ -322,17 +354,26 @@
   <!-- Result -->
   <div id="resultCard">
 
-    <!-- Action bar -->
+    <!-- Action bar — primary export + icon-only secondary actions -->
   <div class="action-bar">
-    <button class="action-btn" onclick="copyPlate()"><i class="fa-solid fa-copy"></i> העתק לוחית</button>
-    <button class="action-btn" onclick="window.print()"><i class="fa-solid fa-print"></i> הדפסה</button>
-    <button class="action-btn" onclick="exportPDF()" id="pdfBtn"><i class="fa-solid fa-file-lines"></i> דוח מקצועי</button>
-    <button class="action-btn" onclick="shareWhatsApp()" style="color:#25d366;border-color:rgba(37,211,102,0.3);">
-      <i class="fa-brands fa-whatsapp"></i> שתף
+    <button class="action-primary" onclick="exportPDF()" id="pdfBtn" type="button">
+      <i class="fa-solid fa-file-lines"></i>
+      <span>הורד דוח מקצועי</span>
     </button>
-    <button class="action-btn" onclick="openStolenCheck()" style="text-decoration:none">
-      <i class="fa-solid fa-shield-halved" style="color:var(--red)"></i> בדוק רכב גנוב
-    </button>
+    <div class="action-icons" role="toolbar" aria-label="פעולות נוספות">
+      <button class="action-icon" onclick="window.print()" type="button" aria-label="הדפסה" title="הדפסה">
+        <i class="fa-solid fa-print"></i>
+      </button>
+      <button class="action-icon" onclick="copyPlate()" type="button" aria-label="העתק לוחית" title="העתק לוחית">
+        <i class="fa-solid fa-copy"></i>
+      </button>
+      <button class="action-icon action-icon-whatsapp" onclick="shareWhatsApp()" type="button" aria-label="שתף ב-WhatsApp" title="שתף ב-WhatsApp">
+        <i class="fa-brands fa-whatsapp"></i>
+      </button>
+      <button class="action-icon action-icon-danger" onclick="openStolenCheck()" type="button" aria-label="בדוק רכב גנוב" title="בדוק רכב גנוב">
+        <i class="fa-solid fa-shield-halved"></i>
+      </button>
+    </div>
   </div>
 
   <!-- Off-road warning banner -->
@@ -361,6 +402,17 @@
 
   <!-- Hero -->
     <div class="hero-panel">
+      <button class="hero-star-btn" id="myCarToggleBtn" onclick="toggleMyCar()" type="button"
+              aria-label="הגדר כרכב שלי" title="הגדר כרכב שלי">
+        <i class="fa-regular fa-star"></i>
+      </button>
+      <!-- Real car photo (carimagesapi.com — set make/model/year via JS).
+           No loading="lazy" here: the wrap is display:none before src is set,
+           and lazy-loading bails out for offscreen/hidden imgs, so the network
+           request never fires. We control visibility manually via JS. -->
+      <div class="car-photo-wrap" id="carPhotoWrap" style="display:none">
+        <img id="carPhoto" alt="">
+      </div>
       <div class="car-info">
         <div>
           <div class="car-brand-row">
@@ -512,6 +564,14 @@
       <div class="data-section full" id="priceSection" style="display:none">
         <div class="section-title"><i class="fa-solid fa-tag"></i> מחיר ויבואן</div>
         <div id="priceBody"></div>
+      </div>
+    </div>
+
+    <!-- עלות בעלות שנתית (TCO) -->
+    <div class="sections-grid" style="margin-top:16px">
+      <div class="data-section full" id="tcoSection" style="display:none">
+        <div class="section-title"><i class="fa-solid fa-coins"></i> עלות בעלות שנתית משוערת</div>
+        <div id="tcoBody"></div>
       </div>
     </div>
 

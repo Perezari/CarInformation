@@ -1,3 +1,240 @@
+// ─── "My Car" — primary vehicle bookmark (localStorage) ─────
+const MY_CAR_KEY = 'my_car_plate';
+function getMyCar()       { return localStorage.getItem(MY_CAR_KEY) || ''; }
+function setMyCar(plate)  { localStorage.setItem(MY_CAR_KEY, String(plate)); syncProfileBtn(); syncMyCarToggle(); }
+function clearMyCar()     { localStorage.removeItem(MY_CAR_KEY); syncProfileBtn(); syncMyCarToggle(); renderMyCarModalBody(); }
+function isMyCar(plate)   { return getMyCar() === String(plate); }
+
+// Star toggle inside the hero panel — icon-only, fills when active
+function syncMyCarToggle() {
+  const btn = document.getElementById('myCarToggleBtn');
+  if (!btn) return;
+  const plate = document.getElementById('stolenRaw')?.value || '';
+  if (!plate) { btn.style.display = 'none'; return; }
+  btn.style.display = 'inline-flex';
+  const mine = isMyCar(plate);
+  btn.classList.toggle('is-mycar', mine);
+  btn.setAttribute('title',      mine ? 'הוסר מהרכב שלי' : 'הגדר כרכב שלי');
+  btn.setAttribute('aria-label', mine ? 'הוסר מהרכב שלי' : 'הגדר כרכב שלי');
+  btn.querySelector('i').className = mine ? 'fa-solid fa-star' : 'fa-regular fa-star';
+}
+
+function toggleMyCar() {
+  const plate = document.getElementById('stolenRaw')?.value;
+  if (!plate) return;
+  if (isMyCar(plate)) clearMyCar();
+  else                setMyCar(plate);
+}
+
+// Reflect my-car state wherever it appears (currently only in the open app menu)
+function syncProfileBtn() {
+  if (document.getElementById('appMenu')?.classList.contains('is-open')) {
+    syncAppMenuState();
+  }
+}
+
+function openMyCarModal() {
+  renderMyCarModalBody();
+  document.getElementById('myCarModal').style.display = 'flex';
+  setModalOpen(true);
+
+  // Backfill snapshot in background if needed (e.g. cleared history)
+  const plate = getMyCar();
+  if (plate) {
+    const item = getHistory().find(x => x.plate === plate);
+    if (!item || !item.snapshot?.year) {
+      ensureSnapshot(plate).then(renderMyCarModalBody);
+    }
+  }
+}
+
+function closeMyCarModal() {
+  document.getElementById('myCarModal').style.display = 'none';
+  setModalOpen(false);
+}
+
+// Build the small "X days remaining" pill for a date-based reminder
+function reminderDays(licenseStr) {
+  if (!licenseStr || licenseStr === '—') return null;
+  const m = licenseStr.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+  if (!m) return null;
+  const d = new Date(+m[3], +m[2]-1, +m[1]);
+  const diff = Math.round((d - new Date()) / (1000*60*60*24));
+  return { diff, dateStr: licenseStr };
+}
+
+// Render a single reminder/stat tile in the new iOS-style 2-column grid
+function tile({ label, value, sub, tone = 'neutral', icon }) {
+  return `
+    <div class="pf-tile pf-tone-${tone}">
+      ${icon ? `<div class="pf-tile-icon"><i class="fa-solid ${icon}"></i></div>` : ''}
+      <div class="pf-tile-label">${label}</div>
+      <div class="pf-tile-value">${value}</div>
+      ${sub ? `<div class="pf-tile-sub">${sub}</div>` : ''}
+    </div>`;
+}
+
+// Render the modal body — full panel for the saved car, or empty state if none
+function renderMyCarModalBody() {
+  const body = document.getElementById('myCarModalBody');
+  if (!body) return;
+  const plate = getMyCar();
+
+  if (!plate) {
+    body.innerHTML = `
+      <div class="mc-empty-state">
+        <div class="mc-empty-icon"><i class="fa-regular fa-star"></i></div>
+        <div class="mc-empty-title">עוד לא הגדרת רכב אישי</div>
+        <div class="mc-empty-text">
+          חפש רכב כלשהו ולחץ על <strong>★ הגדר כרכב שלי</strong> בסרגל הפעולות.<br>
+          הרכב יישמר אצלך ויהיה זמין כאן בכל עת — עם תזכורת לטסט וריקולים פתוחים.
+        </div>
+        <button class="mc-empty-btn" onclick="closeMyCarModal()"><i class="fa-solid fa-arrow-left"></i> חזור לחיפוש</button>
+      </div>`;
+    return;
+  }
+
+  const item = getHistory().find(x => x.plate === plate);
+  const snap = item?.snapshot || {};
+
+  // ── Hero header ──
+  const logoHTML = item?.logo
+    ? `<div class="pf-logo-badge"><img src="${item.logo}" class="pf-logo" onerror="this.parentElement.innerHTML='<i class=\\'fa-solid fa-car pf-logo-fallback\\'></i>'"></div>`
+    : `<div class="pf-logo-badge"><i class="fa-solid fa-car pf-logo-fallback"></i></div>`;
+  const make  = (snap.make  || '').trim();
+  const model = (snap.model || '').trim();
+
+  // ── Vehicle ID card (year, plate, engine, trim) ──
+  const plateHTML = `
+    <div class="pf-plate-il">
+      <div class="pf-plate-flag"><span>IL</span></div>
+      <div class="pf-plate-num">${fPlate(plate)}</div>
+    </div>`;
+  // Order matches the visual RTL layout: first cell renders on the right
+  const idCells = [
+    { label: 'מספר רכב',   value: plateHTML },
+    { label: 'שנת ייצור',  value: snap.year || '—' },
+    { label: 'רמת גימור', value: snap.trim || '—' },
+    { label: 'נפח מנוע',  value: snap.engine ? Number(snap.engine).toLocaleString('he-IL') : '—', sub: snap.engine ? 'סמ"ק' : '' },
+  ];
+  const idGridHTML = `
+    <div class="pf-id-grid">
+      ${idCells.map(c => `
+        <div class="pf-id-cell">
+          <div class="pf-id-label">${c.label}</div>
+          <div class="pf-id-value">${c.value}${c.sub ? ` <span class="pf-id-unit">${c.sub}</span>` : ''}</div>
+        </div>`).join('')}
+    </div>`;
+
+  // ── Reminder tiles ──
+  const tiles = [];
+
+  // Test / license expiry
+  const lic = reminderDays(snap.license);
+  if (lic) {
+    const tone = lic.diff < 0 ? 'bad' : lic.diff < 60 ? 'warn' : 'ok';
+    tiles.push(tile({
+      label: 'טסט לרכב',
+      value: lic.diff < 0
+        ? `<span class="pf-big">${Math.abs(lic.diff)}</span> <span class="pf-unit">ימים פג</span>`
+        : `<span class="pf-big">${lic.diff}</span> <span class="pf-unit">ימים</span>`,
+      sub: lic.dateStr,
+      tone,
+      icon: 'fa-clipboard-check',
+    }));
+  } else {
+    tiles.push(tile({ label: 'טסט לרכב', value: '<span class="pf-na">—</span>', sub: 'לא ידוע', tone: 'neutral', icon: 'fa-clipboard-check' }));
+  }
+
+  // Open recalls
+  if (snap.recalls != null) {
+    const rc = Number(snap.recalls);
+    tiles.push(tile({
+      label: 'ריקולים פתוחים',
+      value: `<span class="pf-big">${rc}</span>`,
+      sub: rc === 0 ? 'אין ריקולים' : 'דורש טיפול',
+      tone: rc === 0 ? 'ok' : 'bad',
+      icon: rc === 0 ? 'fa-circle-check' : 'fa-triangle-exclamation',
+    }));
+  }
+
+  // Health score
+  if (snap.health != null) {
+    const h = Number(snap.health);
+    tiles.push(tile({
+      label: 'ציון בריאות',
+      value: `<span class="pf-big">${h}</span><span class="pf-unit">/100</span>`,
+      sub: snap.verdict || '',
+      tone: h >= 75 ? 'ok' : h >= 50 ? 'warn' : 'bad',
+      icon: 'fa-heart-pulse',
+    }));
+  }
+
+  // Annual license fee (only if estimate exists)
+  if (snap.fee) {
+    tiles.push(tile({
+      label: 'אגרת רישוי',
+      value: `<span class="pf-big">₪${Number(snap.fee).toLocaleString('he-IL')}</span>`,
+      sub: 'משוער לשנה',
+      tone: 'neutral',
+      icon: 'fa-coins',
+    }));
+  }
+
+  // Last mileage
+  if (snap.mileage) {
+    tiles.push(tile({
+      label: 'נסועה אחרונה',
+      value: `<span class="pf-big">${Number(snap.mileage).toLocaleString('he-IL')}</span><span class="pf-unit">ק"מ</span>`,
+      sub: snap.avgKm ? `${Number(snap.avgKm).toLocaleString('he-IL')} ק"מ/שנה בממוצע` : '',
+      tone: 'neutral',
+      icon: 'fa-gauge-high',
+    }));
+  }
+
+  // Owners
+  if (snap.owners != null) {
+    const oc = Number(snap.owners);
+    tiles.push(tile({
+      label: 'בעלויות',
+      value: `<span class="pf-big">${oc}</span><span class="pf-unit">ידיים</span>`,
+      sub: oc === 1 ? 'יד ראשונה 🏆' : oc <= 3 ? 'מעט ידיים' : 'ריבוי ידיים',
+      tone: oc <= 1 ? 'ok' : oc <= 3 ? 'neutral' : 'warn',
+      icon: 'fa-users',
+    }));
+  }
+
+  body.innerHTML = `
+    <div class="pf-page">
+      <!-- Hero -->
+      <div class="pf-hero">
+        ${logoHTML}
+        <div class="pf-hero-text">
+          <div class="pf-hero-make">${make || 'הרכב שלי'}</div>
+          ${model ? `<div class="pf-hero-model">${model}</div>` : ''}
+        </div>
+        <button class="pf-hero-clear" onclick="clearMyCar()" title="הסר רכב מהפרופיל"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <!-- Vehicle ID card -->
+      <div class="pf-card">
+        ${idGridHTML}
+        <button class="pf-card-cta" onclick="closeMyCarModal();loadFromHistory('${plate}')">
+          <span>פתח את הדוח המלא</span>
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+      </div>
+
+      <!-- Reminders & stats -->
+      ${tiles.length ? `
+        <div class="pf-section-head">
+          <div class="pf-section-title">תזכורות ונתונים</div>
+        </div>
+        <div class="pf-tiles">${tiles.join('')}</div>` : `
+        <div class="mc-empty">לחץ על "פתח את הדוח" כדי לרענן את הנתונים</div>`}
+    </div>`;
+}
+
 // ─── Recent searches (localStorage) ──────────────────────────
 const HISTORY_KEY = 'car_search_history';
 function getHistory() {
@@ -307,9 +544,41 @@ async function fetchOwnershipHistory(plate) {
   }
 }
 
+// True for ownership types that imply a fleet/rental/leasing vehicle in its past.
+// Israeli registry uses words like: השכרה / לי השכרה, ליסינג, ליסינג מתפעל,
+// השכרה לעצמי. We detect by substring on the cleaned Hebrew label.
+function isRentalLeasingType(baalut) {
+  const s = (baalut || '').toString();
+  return /(השכרה|ליסינג|לי\s*השכרה|השכרה\s*לעצמי)/.test(s);
+}
+
 function renderOwnershipHistory(records, total, plate) {
   const el = document.getElementById('ownershipBody');
   updateHistorySnapshot(plate, { owners: total });
+
+  // ── Detect ex-rental / ex-leasing past ─────────────────────
+  // Find longest contiguous span when the car was held by a rental/leasing
+  // entity. We surface it as a yellow flag + a warning row in the section.
+  const fleet = records
+    .map(r => ({ baalut: r.baalut, dt: String(r.baalut_dt || '') }))
+    .filter(r => isRentalLeasingType(r.baalut));
+  let fleetInfo = null;
+  if (fleet.length) {
+    // sort ascending by date for span
+    const dates = fleet.map(f => f.dt).filter(d => d.length >= 6).sort();
+    const labels = [...new Set(fleet.map(f => (f.baalut || '').trim()))];
+    const fmtMonth = d => `${d.slice(4,6)}/${d.slice(0,4)}`;
+    fleetInfo = {
+      label: labels.join(' / '),
+      from:  dates.length ? fmtMonth(dates[0])               : null,
+      to:    dates.length ? fmtMonth(dates[dates.length-1])  : null,
+      isCurrent: isRentalLeasingType(records[0]?.baalut),
+    };
+    updateHealthFromFleet(fleetInfo);
+    updateHistorySnapshot(plate, { exFleet: fleetInfo.label });
+  } else {
+    updateHealthFromFleet(null);
+  }
 
   // CKAN structure: flat records with {mispar_rechev, baalut, baalut_dt, _id}
   // baalut_dt is numeric: 202211 = 11/2022
@@ -329,17 +598,35 @@ function renderOwnershipHistory(records, total, plate) {
       </div>
     </div>`;
 
+  // Ex-rental / leasing warning banner
+  if (fleetInfo) {
+    const span = (fleetInfo.from && fleetInfo.to && fleetInfo.from !== fleetInfo.to)
+      ? `${fleetInfo.from} → ${fleetInfo.to}`
+      : (fleetInfo.from || '');
+    const verb = fleetInfo.isCurrent ? 'נמצא כעת ב' : 'היה בעבר ב';
+    html += `
+      <div class="fleet-banner">
+        <i class="fa-solid fa-building" style="font-size:1.1rem;flex-shrink:0;"></i>
+        <div>
+          <div class="fleet-banner-title">⚠ הרכב ${verb}${fleetInfo.label.includes('ליסינג') ? 'ליסינג' : 'השכרה'}</div>
+          <div class="fleet-banner-sub">סוג בעלות: ${fleetInfo.label}${span ? ` · ${span}` : ''}. רכבי צי נוטים לק"מ גבוה ולנהיגה אינטנסיבית.</div>
+        </div>
+      </div>`;
+  }
+
   const rows = records.map((r, i) => {
     const baalut = r.baalut ?? '—';
     const rawDt  = String(r.baalut_dt ?? '');
     const date   = rawDt.length >= 6
       ? `${rawDt.slice(4,6)}/${rawDt.slice(0,4)}`
       : (rawDt || '—');
+    const fleetMark = isRentalLeasingType(baalut)
+      ? `<span class="fleet-tag" title="רכב צי / השכרה / ליסינג"><i class="fa-solid fa-building"></i></span>` : '';
     return `
       <div class="data-row">
         <span class="data-label" style="display:flex;align-items:center;gap:7px;">
           <span style="width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:800;flex-shrink:0;">${i+1}</span>
-          ${baalut}
+          ${baalut}${fleetMark}
         </span>
         <span class="data-value" style="color:var(--text-dim);">${date}</span>
       </div>`;
@@ -534,6 +821,14 @@ function renderImporterPrice(rec) {
       </div>`;
   }
 
+  // Feed TCO with price + projected annual depreciation
+  if (price && year) {
+    _tcoData.price   = price;
+    _tcoData.year    = year;
+    _tcoData.depYear = estimateAnnualDepreciation(price, year, km, owners);
+    tryRenderTCO();
+  }
+
   html += `
     <div class="price-note">
       <i class="fa-solid fa-circle-info"></i>
@@ -541,6 +836,99 @@ function renderImporterPrice(rec) {
     </div>`;
 
   body.innerHTML = html;
+  sec.style.display = 'block';
+}
+
+// ─── TCO (Total Cost of Ownership) ───────────────────────────
+// Aggregated as data arrives from independent fetches.
+// Reset by fetchCar() before each new search.
+const _tcoData = { price: null, year: null, fuel: null, license: null,
+                   maintAge: null, maintKm: null, depYear: null };
+
+// Estimated annual maintenance cost in NIS.
+// Heuristic from Israeli car-owner forums + dealer service prices:
+//   • base by age: <3y → ₪1500 (warranty), 3-7y → ₪3000, 8-12y → ₪4500, 13+y → ₪6000
+//   • km adjustment: heavy mileage → +25%, low mileage → -15%
+function estimateMaintenance(year, avgKm) {
+  if (!year) return null;
+  const age = new Date().getFullYear() - Number(year);
+  let base;
+  if      (age <  3) base = 1500;
+  else if (age <= 7) base = 3000;
+  else if (age <=12) base = 4500;
+  else               base = 6000;
+  if (avgKm) {
+    if      (avgKm > 25000) base *= 1.35;
+    else if (avgKm > 18000) base *= 1.20;
+    else if (avgKm < 8000)  base *= 0.85;
+  }
+  return Math.round(base / 50) * 50;
+}
+
+// Annual depreciation = value(now) - value(in 1 year). We approximate by
+// running estimateCurrentValue once with current age, once with age+1.
+function estimateAnnualDepreciation(price, year, kmTotal, owners) {
+  if (!price || !year) return null;
+  const now = estimateCurrentValue(price, year, kmTotal, owners);
+  // Project km +avgKm for next year (small impact, keep simple)
+  const next = estimateCurrentValue(price, Number(year) - 1, kmTotal, owners);
+  if (!now || !next) return null;
+  // next has 1 extra year of age, so its value < now.value → depreciation = now - next
+  const drop = now.mid - next.mid;
+  return drop > 0 ? Math.round(drop / 50) * 50 : null;
+}
+
+function tryRenderTCO() {
+  const sec = document.getElementById('tcoSection');
+  const body = document.getElementById('tcoBody');
+  if (!sec || !body) return;
+
+  // Need at least the licence fee to be useful
+  if (_tcoData.license == null && _tcoData.fuel == null
+      && _tcoData.depYear == null && _tcoData.maintAge == null) {
+    sec.style.display = 'none';
+    return;
+  }
+
+  const items = [];
+  const push = (icon, label, val, note='') => {
+    if (val == null) return;
+    items.push({ icon, label, val, note });
+  };
+
+  push('fa-id-card',     'אגרת רישוי',           _tcoData.license, 'לפי קבוצת זיהום');
+  push('fa-gas-pump',    'דלק',                   _tcoData.fuel,    'לפי נסועה ממוצעת');
+  push('fa-screwdriver-wrench', 'תחזוקה',         _tcoData.maintAge, 'הערכה לפי גיל וק"מ');
+  push('fa-arrow-trend-down',   'ירידת ערך',     _tcoData.depYear, 'לשנה הקרובה (אומדן)');
+
+  if (!items.length) { sec.style.display = 'none'; return; }
+
+  const total = items.reduce((s, x) => s + (x.val || 0), 0);
+  const monthly = Math.round(total / 12 / 50) * 50;
+
+  const cells = items.map(x => `
+    <div class="tco-cell">
+      <i class="fa-solid ${x.icon} tco-cell-icon"></i>
+      <div class="tco-cell-val">₪${x.val.toLocaleString('he-IL')}</div>
+      <div class="tco-cell-lbl">${x.label}</div>
+      <div class="tco-cell-note">${x.note}</div>
+    </div>`).join('');
+
+  body.innerHTML = `
+    <div class="tco-grid">${cells}</div>
+    <div class="tco-total">
+      <div class="tco-total-row">
+        <span class="tco-total-lbl">סה"כ לשנה</span>
+        <span class="tco-total-val">₪${total.toLocaleString('he-IL')}</span>
+      </div>
+      <div class="tco-total-row tco-monthly">
+        <span class="tco-monthly-lbl">≈ ${monthly.toLocaleString('he-IL')} ש"ח לחודש</span>
+      </div>
+    </div>
+    <div class="tco-note">
+      <i class="fa-solid fa-circle-info"></i>
+      אומדן בלבד. לא כולל ביטוח חובה ומקיף, חניה, חניוני אזורי, נסיעות בכבישי אגרה ותקלות בלתי-צפויות.
+    </div>`;
   sec.style.display = 'block';
 }
 
@@ -784,6 +1172,11 @@ function tryRenderFuelCost(avgKm) {
   } else if (row) {
     row.style.display = 'none';
   }
+
+  // Feed TCO with fuel cost + maintenance derived from km
+  if (cost) _tcoData.fuel = cost;
+  if (km) _tcoData.maintAge = estimateMaintenance(_tcoData.year, km);
+  tryRenderTCO();
 }
 
 async function fetchVehicleSpecs(tozeret_cd, degem_cd, year) {
@@ -845,6 +1238,10 @@ function buildScale(min, max, current, lowIsGood) {
 
 function renderVehicleSpecs(s) {
   _currentSpecs = s;
+
+  // Persist engine displacement on history snapshot for Profile card
+  const plate = document.getElementById('stolenRaw')?.value;
+  if (plate && s.nefah_manoa) updateHistorySnapshot(plate, { engine: Number(s.nefah_manoa) });
 
   // ── Environment section (with emissions B) ──
   const envSection = document.getElementById('envSection');
@@ -1666,6 +2063,124 @@ function categorizeKmPerYear(avg) {
   return                { label: 'נמוך',  cls: 'green' };
 }
 
+// ─── Real car photo via carimagesapi.com ──────────────────────
+// We call the signed-urls API directly (POST /api/v1/signed-urls) instead of
+// relying on the bundled JS loader's MutationObserver — that one was racing
+// with our clone-and-replace and never fired in some cases. Direct calls give
+// us deterministic timing, easy debug, and per-search caching.
+const CARIMAGES_API_KEY = 'ci_5704e4de28ef0e58caefd809b9f2553db1c31b7ee9be4501a02cb234';
+const CARIMAGES_URL     = 'https://carimagesapi.com/api/v1/signed-urls';
+const _carPhotoCache    = new Map(); // key → resolved url or null
+
+// Map Hebrew colors from the registry to English keywords the image API can
+// match. Returns null for unmapped values so we don't send junk.
+const HEB_TO_EN_COLOR = {
+  'לבן':'white','שנהב לבן':'ivory','שמנת':'cream',
+  "בז'":'beige','בז':'beige',
+  'שחור':'black',
+  'כסף':'silver','כסוף':'silver','כסוף כהה':'silver',
+  'אפור':'gray','אפור כהה':'gray','אפור בהיר':'gray',
+  'כחול':'blue','כחול כהה':'blue','כחול בהיר':'blue','תכלת':'lightblue',
+  'אדום':'red','אדום כהה':'red','בורדו':'maroon',
+  'ירוק':'green','ירוק כהה':'green','זית':'olive',
+  'צהוב':'yellow','זהב':'gold',
+  'חום':'brown','חום כהה':'brown','ברונזה':'bronze',
+  'כתום':'orange','תפוז':'orange',
+  'ורוד':'pink','סגול':'purple',
+};
+function colorHebToEn(heb) {
+  if (!heb) return null;
+  const n = heb.trim();
+  if (HEB_TO_EN_COLOR[n]) return HEB_TO_EN_COLOR[n];
+  // longest-prefix fallback for compounds like "כחול מטאלי"
+  let best = null;
+  for (const k of Object.keys(HEB_TO_EN_COLOR)) {
+    if (n.includes(k) && (!best || k.length > best.length)) best = k;
+  }
+  return best ? HEB_TO_EN_COLOR[best] : null;
+}
+
+async function loadCarPhoto(engBrand, modelHeb, kinuyEn, year, colorHeb) {
+  const wrap = document.getElementById('carPhotoWrap');
+  const img  = document.getElementById('carPhoto');
+  if (!wrap || !img) return;
+
+  wrap.style.display = 'none';
+  img.removeAttribute('src');
+
+  // Pick the cleanest English model name. Strip leading brand (e.g.
+  // "MAZDA CX-5" → "CX-5") and trim trailing parenthetical trim labels.
+  const brandLower = (engBrand || '').toLowerCase();
+  let model = (kinuyEn || modelHeb || '').trim();
+  if (brandLower && model.toLowerCase().startsWith(brandLower)) {
+    model = model.slice(brandLower.length).trim();
+  }
+  model = model.replace(/\s*\(.*?\)\s*$/, '').trim();
+  if (!engBrand || !model || !year) {
+    console.warn('[carimages] missing fields', { engBrand, model, year });
+    return;
+  }
+
+  const color = colorHebToEn(colorHeb);
+  const key = `${engBrand}|${model}|${year}|${color || ''}`;
+
+  if (_carPhotoCache.has(key)) {
+    const url = _carPhotoCache.get(key);
+    console.log('[carimages] cache', key, '→', url ? 'hit' : 'no-image');
+    if (url) showCarPhoto(url, `${engBrand} ${model} ${year}`);
+    return;
+  }
+
+  const payload = { make: engBrand, model, year: String(year), width: '900', format: 'webp' };
+  if (color) payload.color = color;
+  console.log('[carimages] requesting', payload);
+
+  try {
+    const res = await fetch(`${CARIMAGES_URL}?api_key=${encodeURIComponent(CARIMAGES_API_KEY)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images: [payload] }),
+    });
+    const data = await res.json().catch(() => ({}));
+    console.log('[carimages] response', res.status, data);
+
+    if (!res.ok) { _carPhotoCache.set(key, null); return; }
+    let url = data?.urls?.[0];
+
+    // If color-specific lookup returned nothing, retry without color
+    if (!url && color) {
+      console.log('[carimages] no color match, retrying without color');
+      const retryPayload = { ...payload }; delete retryPayload.color;
+      const r2 = await fetch(`${CARIMAGES_URL}?api_key=${encodeURIComponent(CARIMAGES_API_KEY)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: [retryPayload] }),
+      });
+      const d2 = await r2.json().catch(() => ({}));
+      console.log('[carimages] retry response', r2.status, d2);
+      url = d2?.urls?.[0];
+    }
+
+    _carPhotoCache.set(key, url || null);
+    if (url) showCarPhoto(url, `${engBrand} ${model} ${year}`);
+    else console.warn('[carimages] no image returned for', payload);
+  } catch (e) {
+    console.warn('[carimages] fetch failed', e);
+    _carPhotoCache.set(key, null);
+  }
+}
+
+function showCarPhoto(url, alt) {
+  const wrap = document.getElementById('carPhotoWrap');
+  const img  = document.getElementById('carPhoto');
+  if (!wrap || !img) return;
+  console.log('[carimages] setting src', url);
+  img.alt = alt || '';
+  img.onload  = () => { console.log('[carimages] img loaded'); wrap.style.display = 'block'; };
+  img.onerror = () => { console.warn('[carimages] img failed to load'); wrap.style.display = 'none'; };
+  img.src = url;
+}
+
 // ─── Brand logo ───────────────────────────────────────────────
 const BRAND_MAP = {
   hyundai:'hyundai', toyota:'toyota', kia:'kia', honda:'honda',
@@ -1689,7 +2204,7 @@ function loadBrandLogo(kinuyEn, tozetNm, engBrand) {
 }
 
 // ─── Health Score ─────────────────────────────────────────────
-const healthData = { base: null, mileage: null, owners: null, recalls: null, changes: null };
+const healthData = { base: null, mileage: null, owners: null, recalls: null, changes: null, fleet: null };
 
 // ─── Timeline data store ──────────────────────────────────────
 const tlData = { base: null, owners: null, recalls: null };
@@ -1839,6 +2354,18 @@ function updateHealthFromOwnership(count) {
   renderHealthScore();
 }
 
+function updateHealthFromFleet(fleetInfo) {
+  if (!fleetInfo) { healthData.fleet = null; renderHealthScore(); return; }
+  const isLeasing = /ליסינג/.test(fleetInfo.label);
+  const txt = fleetInfo.isCurrent
+    ? (isLeasing ? 'בליסינג כעת' : 'בהשכרה כעת')
+    : (isLeasing ? 'היה בליסינג' : 'היה בהשכרה');
+  // Currently in fleet is worse for a buyer than past-fleet
+  const score = fleetInfo.isCurrent ? -10 : -6;
+  healthData.fleet = { score, flags: [{ cls: 'hf-yellow', txt }] };
+  renderHealthScore();
+}
+
 function updateHealthFromRecalls(count) {
   const flags = [];
   let score = 0;
@@ -1854,7 +2381,8 @@ function renderHealthScore() {
   let total = healthData.base.score
     + (healthData.changes?.score  || 0)
     + (healthData.owners?.score   || 0)
-    + (healthData.recalls?.score  || 0);
+    + (healthData.recalls?.score  || 0)
+    + (healthData.fleet?.score    || 0);
   total = Math.max(0, Math.min(100, total));
 
   const allFlags = [
@@ -1862,6 +2390,7 @@ function renderHealthScore() {
     ...(healthData.changes?.flags || []),
     ...(healthData.owners?.flags  || []),
     ...(healthData.recalls?.flags || []),
+    ...(healthData.fleet?.flags   || []),
   ];
 
   // Color
@@ -1912,10 +2441,11 @@ async function fetchCar() {
 
   // Reset cross-search UI state — sections we skip for some vehicle types must
   // not retain content from the previous search
-  ['publicBadge', 'priceSection', 'offRoadBanner', 'inactiveBanner'].forEach(id => {
+  ['publicBadge', 'priceSection', 'tcoSection', 'offRoadBanner', 'inactiveBanner', 'carPhotoWrap'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
+  Object.keys(_tcoData).forEach(k => _tcoData[k] = null);
   const kmSec = document.getElementById('kmSection');
   const ownSec = document.getElementById('ownershipSection');
   if (kmSec)  kmSec.style.display  = '';
@@ -2061,6 +2591,7 @@ async function fetchCar() {
       if (hebKey) engBrand = HEB_TO_ENG[hebKey];
     }
     loadBrandLogo(kinuyEn, tozetNm, engBrand);
+    loadCarPhoto(engBrand, c.degem_nm, kinuyEn, c.shnat_yitzur, c.tzeva_rechev);
 
     // ── Computed insights: license fee + avg km/year placeholder ──
     const fee = estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur);
@@ -2072,6 +2603,12 @@ async function fetchCar() {
       set('qFee', '—');
       feeChip.classList.remove('accent');
     }
+
+    // Seed TCO with what we already know — fuel/depreciation come later async
+    _tcoData.year     = c.shnat_yitzur || null;
+    _tcoData.license  = fee || null;
+    _tcoData.maintAge = estimateMaintenance(c.shnat_yitzur, null);
+    tryRenderTCO();
     // Avg km/year is filled in renderVehicleHistory once mileage arrives
     set('qAvgKm', '—');
     document.getElementById('chipAvgKm').className = 'stat-chip';
@@ -2082,12 +2619,13 @@ async function fetchCar() {
     const snapshot = {
       make:    makeHeb,
       model:   modelHeb,
+      trim:    c.ramat_gimur || null,
       year:    c.shnat_yitzur || null,
       fuel:    c.sug_delek_nm || null,
       color:   c.tzeva_rechev || null,
       license: fDate(c.tokef_dt),
       fee:     estimateLicenseFee(c.kvutzat_zihum, c.shnat_yitzur),
-      // mileage / avgKm / owners / recalls / health filled in by async fetches below
+      // mileage / avgKm / owners / recalls / health / engine filled in by async fetches below
     };
     addToHistory(raw, label, logoUrl, snapshot);
 
@@ -2126,6 +2664,8 @@ async function fetchCar() {
 
     statusMsg('');
     document.getElementById('resultCard').style.display = 'block';
+    syncMyCarToggle();
+    syncProfileBtn();
 
   } catch (e) {
     // Still check if car is off-road even if not in active registry
@@ -2713,6 +3253,7 @@ async function ensureSnapshot(plate) {
       updateHistorySnapshot(plate, {
         make:    c.tozeret_nm || '',
         model:   c.kinuy_mishari || c.degem_nm || '',
+        trim:    c.ramat_gimur || null,
         year:    c.shnat_yitzur || null,
         fuel:    c.sug_delek_nm || null,
         color:   c.tzeva_rechev || null,
@@ -2893,16 +3434,131 @@ function toggleTheme() {
   localStorage.setItem('theme', next);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', next === 'light' ? '#f5f5f7' : '#0a0c10');
+  syncThemeMenuLabel();
 }
+
+function syncThemeMenuLabel() {
+  const lbl = document.getElementById('menuThemeLabel');
+  if (!lbl) return;
+  const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
+  lbl.textContent = dark ? 'ערכה בהירה' : 'ערכה כהה';
+}
+
+// ─── App menu (hamburger) ────────────────────────────────────
+function closeAllModals() {
+  ['myCarModal', 'compareModal', 'sourcesModal', 'modelRecallsModal', 'cameraModal']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.style.display !== 'none') el.style.display = 'none';
+    });
+  // Camera needs an explicit stop to release the stream
+  if (typeof closeCamera === 'function' && document.getElementById('cameraModal')) {
+    if (cameraStream) closeCamera();
+  }
+  setModalOpen(false);
+}
+
+function toggleAppMenu(ev) {
+  ev?.stopPropagation();
+  const menu = document.getElementById('appMenu');
+  const btn  = document.getElementById('appMenuBtn');
+  if (!menu || !btn) return;
+  const open = !menu.classList.contains('is-open');
+  if (open) {
+    syncAppMenuState();
+    menu.classList.add('is-open');
+    btn.classList.add('is-open');
+    btn.setAttribute('aria-expanded', 'true');
+  } else {
+    closeAppMenu();
+  }
+}
+
+function closeAppMenu() {
+  const menu = document.getElementById('appMenu');
+  const btn  = document.getElementById('appMenuBtn');
+  // Drop focus before hiding so screen readers don't see a focused-yet-hidden control
+  if (document.activeElement && menu?.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+  if (menu) menu.classList.remove('is-open');
+  if (btn)  { btn.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+}
+
+// Refresh menu items' active/disabled state right before showing
+function syncAppMenuState() {
+  // Profile: active state if my-car is set
+  const profileItem = document.getElementById('menuProfileBtn');
+  if (profileItem) {
+    const set = !!getMyCar();
+    profileItem.classList.toggle('is-active', set);
+    profileItem.querySelector('.app-menu-icon').className =
+      `app-menu-icon ${set ? 'fa-solid' : 'fa-regular'} fa-star`;
+  }
+  // Compare: disabled if fewer than 2 cars in history
+  const cmpItem = document.getElementById('menuCompareBtn');
+  if (cmpItem) cmpItem.disabled = getHistory().length < 2;
+
+  syncThemeMenuLabel();
+}
+
+// Close on outside click + Escape
+document.addEventListener('click', e => {
+  const menu = document.getElementById('appMenu');
+  const btn  = document.getElementById('appMenuBtn');
+  if (!menu?.classList.contains('is-open')) return;
+  if (menu.contains(e.target) || btn?.contains(e.target)) return;
+  closeAppMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAppMenu();
+});
 
 // Init
 renderHistory();
+syncProfileBtn();
+
+// Self-heal: backfill snapshot for my-car if missing (e.g. cleared history).
+// We do this eagerly at boot so the profile modal has data the first time it opens.
+(function backfillMyCar() {
+  const plate = getMyCar();
+  if (!plate) return;
+  const item = getHistory().find(x => x.plate === plate);
+  if (!item) {
+    const h = getHistory();
+    h.unshift({ plate, label: fPlate(plate), logo: '', snapshot: null });
+    if (h.length > 5) h.length = 5;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+    renderHistory();
+  }
+  if (!item || !item.snapshot?.year) {
+    ensureSnapshot(plate);
+  }
+})();
 
 // Deep-link: read URL params on load
+// Accepts:
+//   ?plate=NNNNNNN  — canonical
+//   ?p=NNNNNNN      — short alias for chat/group sharing
+//   ?title=... ?text=... ?url=...  — PWA Share Target (we scan for a plate inside)
 (function initFromUrl() {
   const params = new URLSearchParams(location.search);
-  const plate  = (params.get('plate') || '').replace(/\D/g, '');
   const action = params.get('action');
+
+  // Try canonical/short keys first
+  let plate = (params.get('plate') || params.get('p') || '').replace(/\D/g, '');
+
+  // PWA Share Target: extract first 7-8 digit run from any shared text
+  if (!plate) {
+    const shared = [params.get('title'), params.get('text'), params.get('url')]
+      .filter(Boolean).join(' ');
+    if (shared) {
+      // Strip plate separators (e.g. "12-345-67") then look for a 7-8 digit run
+      const cleaned = shared.replace(/[-\s]/g, '');
+      const m = cleaned.match(/\d{7,8}/);
+      if (m) plate = m[0];
+    }
+  }
 
   // Allow short plates (4-6 digits) too — older private vehicles, motorcycles,
   // construction equipment etc.
