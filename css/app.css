@@ -634,6 +634,13 @@
      the bottom border on the last extra row so it visually connects to the
      row below it instead of looking detached */
   #publicVehicleExtras .data-row:last-child { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  /* Same problem inside the tech section: techExtraRows' last row loses its
+     border to :last-child, but vehicleExtraRows below it adds more rows. If
+     vehicleExtraRows actually has content, restore the divider. */
+  #techExtraRows:has(+ #vehicleExtraRows .data-row) .data-row:last-child {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+  }
   .data-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; }
   .data-value { font-size: 0.9rem; color: var(--text); font-weight: 600; text-align: left; max-width: 55%; }
 
