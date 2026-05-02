@@ -351,6 +351,76 @@ function renderCountdown(dateStr) {
   else if (diff < 60) { cls='countdown-warn'; txt=`${diff} ימים נותרו ⚠️`; }
   else                { cls='countdown-ok';   txt=`${diff} ימים נותרו ✓`; }
   el.innerHTML = `<span class="countdown-badge ${cls}">${txt}</span>`;
+
+  // Reveal the "add to calendar" button (with a 30-day VALARM in the ICS)
+  const icsBtn = document.getElementById('icsBtn');
+  if (icsBtn) icsBtn.style.display = diff >= -365 ? 'inline-flex' : 'none';
+}
+
+// ─── ICS calendar export (license expiry reminder) ────────────
+// Generates a minimal RFC-5545 VEVENT all-day event with a 30-day VALARM and
+// triggers a download. Compatible with Google Calendar (import), Apple
+// Calendar, and Outlook — no auth, no backend.
+function downloadLicenseICS() {
+  const dateStr = document.getElementById('dLicense')?.textContent?.trim();
+  const plateRaw = document.getElementById('stolenRaw')?.value || '';
+  const plate    = document.getElementById('plateTxt')?.textContent?.trim() || plateRaw;
+  const make     = document.getElementById('carMake')?.textContent?.trim()  || '';
+  const model    = document.getElementById('carModel')?.textContent?.trim() || '';
+  if (!dateStr || dateStr === '—') return;
+
+  // Parse "dd.mm.yyyy" or "dd/mm/yyyy"
+  const m = dateStr.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{4})/);
+  if (!m) return;
+  const yyyy = m[3], mm = m[2].padStart(2, '0'), dd = m[1].padStart(2, '0');
+  const date = `${yyyy}${mm}${dd}`;
+  // DTEND for an all-day event is exclusive (next day)
+  const next = new Date(+yyyy, +mm-1, +dd + 1);
+  const dateNext = `${next.getFullYear()}${String(next.getMonth()+1).padStart(2,'0')}${String(next.getDate()).padStart(2,'0')}`;
+
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  // Escape for ICS: backslash, comma, semicolon, newline
+  const esc = s => String(s).replace(/[\\,;]/g, '\\$&').replace(/\r?\n/g, '\\n');
+  const carTitle = [make, model].filter(Boolean).join(' ').trim() || 'הרכב שלי';
+  const summary  = `חידוש רישיון רכב — ${plate}`;
+  const desc     = `תוקף רישיון הרכב ${carTitle} (${plate}) פג בתאריך ${dateStr}.\\nיש לחדש לפני התאריך כדי להימנע מקנס איחור.\\nנוצר ע"י Veritas — מאגר רכבים ישראל.`;
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Veritas//Car Lookup//HE',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:license-${plateRaw}-${date}@veritas.local`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;VALUE=DATE:${date}`,
+    `DTEND;VALUE=DATE:${dateNext}`,
+    `SUMMARY:${esc(summary)}`,
+    `DESCRIPTION:${desc}`,
+    'BEGIN:VALARM',
+    'TRIGGER:-P30D',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:${esc('רישיון הרכב יפוג בעוד 30 ימים')}`,
+    'END:VALARM',
+    'BEGIN:VALARM',
+    'TRIGGER:-P7D',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:${esc('רישיון הרכב יפוג בעוד שבוע')}`,
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR',
+    '',
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `license-${plateRaw}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
 }
 
 // ─── Copy plate ───────────────────────────────────────────────
@@ -2638,6 +2708,7 @@ async function fetchCar() {
     _tcoData.license  = fee || null;
     _tcoData.maintAge = estimateMaintenance(c.shnat_yitzur, null);
     tryRenderTCO();
+
     // Avg km/year is filled in renderVehicleHistory once mileage arrives
     set('qAvgKm', '—');
     document.getElementById('chipAvgKm').className = 'stat-chip';
@@ -2705,9 +2776,12 @@ async function fetchCar() {
 
 // ─── Export PDF → Professional HTML Report ────────────────────
 function exportPDF() {
-  const g = id => document.getElementById(id)?.textContent?.trim() || '—';
+  const g  = id => document.getElementById(id)?.textContent?.trim() || '—';
+  const gx = id => { const v = document.getElementById(id)?.textContent?.trim(); return (!v || v === '—') ? '' : v; };
 
   const plate      = g('plateTxt');
+  const plateRaw   = document.getElementById('stolenRaw')?.value || '';
+  const snap       = getHistory().find(x => x.plate === plateRaw)?.snapshot || {};
   const make       = g('carMake');
   const model      = g('carModel');
   const trim       = g('carTrim');
@@ -2715,77 +2789,120 @@ function exportPDF() {
   const fuel       = g('qFuel');
   const carColor   = g('qColor');
   const license    = g('qLicense');
+  const fee        = gx('qFee');
+  const avgKm      = gx('qAvgKm');
   const healthNum  = g('healthNum');
   const healthVerdict = g('healthVerdict');
   const today      = new Date().toLocaleDateString('he-IL', {day:'2-digit',month:'2-digit',year:'numeric'});
 
-  // Collect flags
+  // Real car photo (from carPhoto element if loaded successfully)
+  const carPhotoEl  = document.getElementById('carPhoto');
+  const carPhotoSrc = carPhotoEl?.src && document.getElementById('carPhotoWrap')?.style.display === 'block' ? carPhotoEl.src : '';
+
+  // Brand logo
+  const brandLogoEl  = document.getElementById('brandLogo');
+  const brandLogoSrc = brandLogoEl?.src && brandLogoEl.style.display !== 'none' ? brandLogoEl.src : '';
+
+  // Collect health flags
   const flagEls  = [...document.querySelectorAll('#healthFlags .health-flag')];
   const flagsHTML = flagEls.map(f => {
     const cls = f.classList.contains('hf-red') ? 'flag-red' : f.classList.contains('hf-green') ? 'flag-green' : 'flag-yellow';
     return `<span class="flag ${cls}">${f.textContent.trim()}</span>`;
   }).join('');
 
-  // Collect data sections
-  const sections = [
-    { title:'פרטי הרכב', icon:'🚗', rows:[
-      ['שם תוצר', g('dMake')], ['שם דגם', g('dModel')], ['כינוי מסחרי', g('dKinuy')],
-      ['רמת גימור', g('dTrim')], ['דגם מנוע', g('dEngine')], ['סוג דגם', g('dSugDegem')],
-      ['קוד תוצר', g('dMakeCd')], ['קוד דגם', g('dModelCd')],
-    ]},
-    { title:'פרטים טכניים', icon:'⚙️', rows:[
-      ['סוג דלק', g('dFuel')], ['צמיג קדמי', g('dTireF')], ['צמיג אחורי', g('dTireR')],
-      ['קבוצת זיהום', g('dPollution')], ['רמת איבזור בטיחות', g('dSafety')],
-    ]},
-    { title:'בעלות ורישום', icon:'📋', rows:[
-      ['סוג בעלות', g('dOwner')], ['מספר שילדה', g('dChassis')],
-      ['הוראת רישום', g('dRegOrder')], ['מועד עלייה לכביש', g('dFirstReg')],
-      ['קוד צבע', g('dColorCd')], ['צבע רכב', g('dColor')],
-    ]},
-    { title:'תאריכים ותוקף', icon:'📅', rows:[
-      ['שנת ייצור', g('dYear')], ['תאריך מבחן אחרון', g('dLastTest')],
-      ['תוקף רישיון רכב', g('dLicense')],
-    ]},
-  ];
-
-  const sectionsHTML = sections.map(sec => `
-    <div class="section">
-      <div class="section-header"><span class="section-icon">${sec.icon}</span>${sec.title}</div>
-      <table class="data-table">
-        ${sec.rows.map(([label, val]) => `
-        <tr>
-          <td class="cell-label">${label}</td>
-          <td class="cell-value">${val}</td>
-        </tr>`).join('')}
-      </table>
-    </div>`).join('');
-
-  // Ownership history
-  const ownerRows = [...document.querySelectorAll('#ownershipBody .data-row')].map(row => {
+  // Ownership history rows (chips)
+  const ownerChipsHTML = [...document.querySelectorAll('#ownershipBody .data-row')].map((row, i) => {
     const spans = row.querySelectorAll('span');
-    const label = spans[0]?.textContent?.replace(/^\d+/, '').trim() || '';
-    const val   = spans[1]?.textContent?.trim() || '';
-    return `<tr><td class="cell-label">${label}</td><td class="cell-value">${val}</td></tr>`;
+    const rawLabel = spans[0]?.textContent?.trim() || '';
+    const label = rawLabel.replace(/^\d+\s*/, '').replace(/\d/g, '').trim() || rawLabel;
+    const date  = spans[1]?.textContent?.trim() || '';
+    return `<div class="ow-chip"><span class="ow-num">${i+1}</span><span>${label}</span>${date ? `<span class="ow-date">${date}</span>` : ''}</div>`;
   }).join('');
 
   // Recalls
   const recallItems = [...document.querySelectorAll('#recallBody > div > div')].map(item => {
     const type = item.querySelector('span')?.textContent?.trim() || '';
     const desc = item.querySelector('div:last-child')?.textContent?.trim() || '';
-    return `<div class="recall-item"><div class="recall-type">${type}</div><div class="recall-desc">${desc}</div></div>`;
+    return `<div class="recall-item"><div class="rc-type">${type}</div><div class="rc-desc">${desc}</div></div>`;
   }).join('');
 
   // Mileage
   const kmHero  = document.querySelector('#kmBody [style*="2.2rem"]')?.textContent?.trim() || '';
-  const kmRows  = [...document.querySelectorAll('#kmBody .data-row')].map(row => {
+  const kmRowsHTML = [...document.querySelectorAll('#kmBody .data-row')].map(row => {
     const spans = row.querySelectorAll('span');
     return `<tr><td class="l">${spans[0]?.textContent?.trim()||''}</td><td class="v">${spans[1]?.textContent?.trim()||''}</td></tr>`;
   }).join('');
 
+  // Optional sections — read straight from the rendered DOM so we get exactly
+  // what the user is seeing on screen (formatted values, units, etc.)
+  const priceVisible   = document.getElementById('priceSection')?.style.display === 'block';
+  const tcoVisible     = document.getElementById('tcoSection')?.style.display === 'block';
+  const safetyVisible  = document.getElementById('safetySection')?.style.display === 'block';
+  const envVisible     = document.getElementById('envSection')?.style.display === 'block';
+
+  const collectDataRows = (container) =>
+    [...container.querySelectorAll(':scope > .data-row, :scope > div > .data-row')].map(row => {
+      const spans = row.querySelectorAll('span');
+      const l = spans[0]?.textContent?.trim() || '';
+      const v = spans[1]?.textContent?.trim() || '';
+      return l && v ? `<tr><td class="l">${l}</td><td class="v">${v}</td></tr>` : '';
+    }).join('');
+
+  let envRowsHTML = '';
+  if (envVisible) {
+    const envBody = document.getElementById('envBody');
+    const envExtras = document.getElementById('envExtraRows');
+    if (envBody)   envRowsHTML += collectDataRows(envBody);
+    if (envExtras) envRowsHTML += collectDataRows(envExtras);
+  }
+
+  const safetyRowsHTML = safetyVisible
+    ? collectDataRows(document.getElementById('safetyBody'))
+    : '';
+  const safetyFeaturesHTML = safetyVisible
+    ? [...document.querySelectorAll('#safetyBody .safety-feature.feat-yes')].map(f =>
+        `<span class="ftag">✓ ${f.querySelector('span')?.textContent?.trim() || ''}</span>`
+      ).join('')
+    : '';
+
+  // Price block (read pre-formatted text from DOM)
+  let priceHTML = '';
+  if (priceVisible) {
+    const priceVals = [...document.querySelectorAll('#priceBody .price-cell')].map(c => ({
+      val:   c.querySelector('.price-cell-val')?.textContent?.trim() || '',
+      label: c.querySelector('.price-cell-lbl')?.textContent?.trim() || '',
+    })).filter(x => x.val && x.label);
+    const estVal   = document.querySelector('#priceBody .price-est-val')?.textContent?.trim() || '';
+    const estRange = document.querySelector('#priceBody .price-est-range')?.textContent?.trim() || '';
+    const estDrop  = document.querySelector('#priceBody .price-est-drop')?.textContent?.trim() || '';
+
+    const cells = priceVals.map(p =>
+      `<div class="pcell"><div class="pcell-val">${p.val}</div><div class="pcell-lbl">${p.label}</div></div>`
+    ).join('');
+    const estBlock = estVal
+      ? `<div class="pest"><div class="pest-row"><span class="pest-lbl">ערך משוער היום</span><span class="pest-val">${estVal}</span></div>${estRange?`<div class="pest-sub">${estRange}</div>`:''}${estDrop?`<div class="pest-sub">${estDrop}</div>`:''}</div>`
+      : '';
+    priceHTML = `<div class="pgrid">${cells}</div>${estBlock}`;
+  }
+
+  // TCO
+  let tcoHTML = '';
+  if (tcoVisible) {
+    const cells = [...document.querySelectorAll('#tcoBody .tco-cell')].map(c => ({
+      val:   c.querySelector('.tco-cell-val')?.textContent?.trim() || '',
+      label: c.querySelector('.tco-cell-lbl')?.textContent?.trim() || '',
+    })).filter(x => x.val && x.label);
+    const total   = document.querySelector('#tcoBody .tco-total-val')?.textContent?.trim() || '';
+    const monthly = document.querySelector('#tcoBody .tco-monthly-lbl')?.textContent?.trim() || '';
+    const cellsHTML = cells.map(c =>
+      `<div class="tcell"><div class="tcell-val">${c.val}</div><div class="tcell-lbl">${c.label}</div></div>`
+    ).join('');
+    tcoHTML = `<div class="tcgrid">${cellsHTML}</div>${total ? `<div class="ttot"><span>סה"כ לשנה</span><strong>${total}</strong></div>` : ''}${monthly ? `<div class="tsub">${monthly}</div>` : ''}`;
+  }
+
   const score = parseInt(healthNum) || 0;
-  const scoreColor = score >= 75 ? '#16a34a' : score >= 50 ? '#d97706' : '#dc2626';
-  const circumference = 188.5;
-  const offset = circumference - (score / 100) * circumference;
+  const scoreColor = score >= 75 ? '#16a34a' : score >= 50 ? '#b45309' : '#b91c1c';
+  const scoreBg    = score >= 75 ? '#dcfce7' : score >= 50 ? '#fef3c7' : '#fee2e2';
 
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -2795,165 +2912,277 @@ function exportPDF() {
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --brown: #8a7d6f; --brown-dark: #5c524a; --brown-light: #b8aa9a;
-    --paper: #faf8f4; --paper2: #f2ede4; --line: #e0d8cc;
-    --ink: #5c524a; --muted: #8a7d6f;
-    --gold: #c9953a; --red: #b91c1c; --green: #15803d; --amber: #b45309;
+    --paper:   #ffffff;
+    --paper2:  #f7f8fa;
+    --line:    #e5e7eb;
+    --line2:   #d1d5db;
+    --ink:     #111827;
+    --muted:   #6b7280;
+    --dim:     #9ca3af;
+    --accent:  #b8860b;
+    --accent2: #d4a017;
+    --soft:    #fef9e7;
+    --green:   #15803d;
+    --red:     #b91c1c;
+    --amber:   #b45309;
   }
-  * { margin:0; padding:0; box-sizing:border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   @page { size: A4 portrait; margin: 0; }
-
+  html, body { font-family: 'Heebo', sans-serif; }
   body {
-    font-family: 'Heebo', sans-serif;
-    background: #f1f5f9;
-    color: var(--ink); direction: rtl;
+    background: #eef0f4;
+    color: var(--ink);
+    direction: rtl;
     padding: 0 0 60px;
-  }
-
-  /* ── SCREEN TOOLBAR ── */
-  .toolbar {
-    background: var(--brown-dark); color:#fff;
-    padding: 10px 24px; display:flex; align-items:center;
-    justify-content:space-between;
-    position: sticky; top:0; z-index:100;
-  }
-  .back-btn {
-    display:inline-flex; align-items:center; gap:6px;
-    color:rgba(255,255,255,0.8); font-size:0.82rem; font-weight:600;
-    text-decoration:none; padding:5px 12px;
-    border:1px solid rgba(255,255,255,0.25); border-radius:6px;
-  }
-  .print-btn {
-    background:var(--gold); color:#fff; border:none;
-    padding:8px 22px; border-radius:6px;
-    font-family:'Heebo',sans-serif; font-size:0.85rem; font-weight:700; cursor:pointer;
+    font-size: 9pt;
+    line-height: 1.4;
   }
   @media print {
-    .toolbar { display:none !important; }
-    body { background:#fff; padding:0; }
-    .doc { box-shadow:none; border-radius:0; padding:14mm 14mm 10mm; margin:0; max-width:none; }
-    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    body { background: #fff !important; padding: 0; }
+    .doc { box-shadow: none !important; border-radius: 0; padding: 12mm 14mm 12mm; max-width: none; margin: 0; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   }
 
-  /* ── PAGE WRAPPER ── */
   .doc {
     max-width: 820px;
-    margin: 24px auto 0;
+    margin: 24px auto;
     background: #fff;
-    border-radius: 20px;
-    box-shadow: 0 8px 40px rgba(0,0,0,.10);
-    padding: 14mm 14mm 10mm;
-    display: flex; flex-direction: column; gap: 6mm;
+    border-radius: 12px;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.08);
+    padding: 12mm 14mm;
   }
 
-  /* ── HEADER ── */
-  .doc-header {
-    display: flex; align-items: flex-end; justify-content: space-between;
-    border-bottom: 2.5px solid var(--brown); padding-bottom: 4mm;
+  /* ── Header bar ─────────────────────────────────── */
+  .doc-h {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 4mm;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 6mm;
+    page-break-after: avoid; break-after: avoid;
   }
-  .dh-left .org  { font-size: 7pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
-  .dh-left .title{ font-size: 22pt; font-weight:900; letter-spacing:-.02em; color:var(--brown-dark); line-height:1; }
-  .dh-left .sub  { font-size: 7.5pt; color:var(--muted); margin-top:2px; }
-  .dh-right      { text-align:left; }
-  .dh-right .date{ font-size:7pt; color:var(--muted); margin-bottom:4px; }
-  .plate-badge {
-    display:inline-flex; align-items:stretch;
-    border:2px solid var(--brown-dark); border-radius:7px; overflow:hidden;
+  .dh-brand {
+    display: flex; align-items: baseline; gap: 8px;
   }
-  .plate-flag {
-    background:#003399; color:#fff;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    padding:4px 7px; gap:1px; font-size:7pt; font-weight:800;
-  }
-  .plate-flag .flag-emoji { font-size:11pt; }
-  .plate-num {
-    background:#f5c518; color:#111;
-    display:flex; align-items:center; padding:5px 14px;
-    font-size:30pt; letter-spacing:10px; font-weight:700;
-  }
+  .dh-mark { font-size: 13pt; font-weight: 900; color: var(--accent); }
+  .dh-sub  { font-size: 8pt; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .dh-meta { font-size: 8pt; color: var(--muted); text-align: left; }
+  .dh-meta strong { color: var(--ink); display: block; font-size: 9pt; margin-bottom: 1mm; }
 
-  /* ── HERO BAND ── */
-  .hero-band {
-    background: var(--brown); color:#fff;
-    border-radius: 10px; padding: 5mm 6mm;
-    display: grid; grid-template-columns: 1fr auto;
-    align-items: center; gap: 6mm;
+  /* ── Hero ─────────────────────────────────────── */
+  .hero {
+    display: grid;
+    grid-template-columns: 78mm 1fr;
+    gap: 6mm;
+    margin-bottom: 5mm;
+    page-break-inside: avoid; break-inside: avoid;
   }
-  .hb-make   { font-size:6.5pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,0.55); margin-bottom:2px; }
-  .hb-model  { font-size:18pt; font-weight:900; line-height:1.1; }
-  .hb-trim   { font-size:7.5pt; color:rgba(255,255,255,0.55); margin-top:2px; }
-  .hb-stats  { display:flex; gap:6mm; margin-top:4mm; padding-top:3mm; border-top:1px solid rgba(255,255,255,0.2); }
-  .stat-lbl  { font-size:5.5pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,0.45); margin-bottom:1px; }
-  .stat-val  { font-size:9pt; font-weight:700; }
-
-  .score-wrap { position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; flex-shrink:0; }
-  .score-svg  { width:60px; height:60px; display:block; }
-  .sc-track   { fill:none; stroke:rgba(255,255,255,0.15); stroke-width:6; }
-  .sc-fill    { fill:none; stroke-width:6; stroke-linecap:round; }
-  .score-center {
-    position:absolute; top:0; left:0; width:60px; height:60px;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  .hero-photo {
+    background: linear-gradient(135deg, #f3f4f8, #e5e7eb);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 4mm;
+    height: 56mm;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
   }
-  .sc-num { font-size:13pt; font-weight:900; line-height:1; }
-  .sc-lbl { font-size:5pt; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,0.4); }
-  .sc-verdict { font-size:6pt; font-weight:600; color:rgba(255,255,255,0.7); text-align:center; max-width:60px; }
+  .hero-photo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .hero-photo-empty { color: var(--dim); font-size: 18pt; }
 
-  /* ── FLAGS ── */
-  .flags { display:flex; flex-wrap:wrap; gap:4px; }
-  .flag { font-size:6.5pt; font-weight:700; padding:2.5px 9px; border-radius:100px; }
-  .flag-red    { background:#fee2e2; color:var(--red);   border:1px solid #fca5a5; }
-  .flag-green  { background:#dcfce7; color:var(--green); border:1px solid #86efac; }
-  .flag-yellow { background:#fef3c7; color:var(--amber); border:1px solid #fcd34d; }
+  .hero-info { display: flex; flex-direction: column; }
+  .hero-make {
+    font-size: 9pt; font-weight: 800; color: var(--accent);
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .hero-model {
+    font-size: 22pt; font-weight: 900;
+    line-height: 1.05; color: var(--ink);
+    margin-top: 1mm;
+  }
+  .hero-trim {
+    font-size: 9pt; color: var(--muted); margin-top: 1mm;
+    font-weight: 600;
+  }
+  .hero-divider { height: 1px; background: var(--line); margin: 3mm 0; }
 
-  /* ── DATA SECTIONS ── */
-  .sections { display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
-  .sec { border:1.5px solid var(--line); border-radius:8px; overflow:hidden; }
-  .sec-full { grid-column:1/-1; }
+  .hero-bottom {
+    display: flex; align-items: center; gap: 4mm;
+    margin-top: auto;
+  }
+  .h-plate {
+    display: inline-flex; align-items: stretch;
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .h-plate-flag {
+    background: #003399; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 8px; font-size: 8pt; font-weight: 800; letter-spacing: .04em;
+  }
+  .h-plate-num {
+    background: #f5c518; color: #111;
+    display: flex; align-items: center;
+    padding: 4px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16pt; font-weight: 800; letter-spacing: 3px;
+  }
+  .h-score {
+    margin-right: auto;
+    display: flex; align-items: center; gap: 3mm;
+  }
+  .h-score-circle {
+    width: 14mm; height: 14mm;
+    border-radius: 50%;
+    background: ${scoreBg};
+    color: ${scoreColor};
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12pt; font-weight: 900;
+    border: 2px solid ${scoreColor};
+  }
+  .h-score-text {
+    display: flex; flex-direction: column;
+    font-size: 7pt; color: var(--muted);
+    font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .h-score-text strong { font-size: 9pt; color: var(--ink); text-transform: none; letter-spacing: 0; margin-top: 1px; }
+
+  /* ── Flags ─────────────────────────────────────── */
+  .flags {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5mm;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .flag { font-size: 7pt; font-weight: 700; padding: 2.5px 9px; border-radius: 100px; }
+  .flag-red    { background: #fee2e2; color: var(--red);   border: 1px solid #fca5a5; }
+  .flag-green  { background: #dcfce7; color: var(--green); border: 1px solid #86efac; }
+  .flag-yellow { background: #fef3c7; color: var(--amber); border: 1px solid #fcd34d; }
+
+  /* ── Quick stats strip ─────────────────────────── */
+  .qstats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 3mm; margin-bottom: 5mm;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .qstat {
+    background: var(--paper2);
+    border: 1px solid var(--line);
+    border-radius: 8px; padding: 3mm 4mm;
+  }
+  .qstat-lbl { font-size: 7pt; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .qstat-val { font-size: 11pt; font-weight: 800; color: var(--ink); margin-top: 1mm; }
+
+  /* ── Section grid (2 col) ──────────────────────── */
+  .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
+  .sec {
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    background: #fff;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .sec-full { grid-column: 1 / -1; }
   .sec-head {
-    background:var(--paper2); padding:5px 12px;
-    font-size:6.5pt; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
-    color:var(--brown-dark); border-bottom:1.5px solid var(--line);
-    display:flex; align-items:center; gap:5px;
+    background: var(--paper2);
+    padding: 3mm 4mm;
+    font-size: 8pt; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent);
+    border-bottom: 1px solid var(--line);
+    page-break-after: avoid; break-after: avoid;
+    display: flex; align-items: center; gap: 6px;
   }
-  .sec-head-icon { font-size:9pt; }
-  table.dt { width:100%; border-collapse:collapse; background:#fff; }
-  table.dt tr:not(:last-child) td { border-bottom:1px solid var(--line); }
-  td.l { padding:4.5px 10px; font-size:7pt; color:var(--muted); font-weight:500; width:40%; border-left:1px solid var(--line); white-space:nowrap; }
-  td.v { padding:4.5px 10px; font-size:7.5pt; font-weight:700; color:var(--ink); }
+  .sec-head svg { stroke: currentColor; }
 
-  /* ── OWNERSHIP CHIPS ── */
-  .owner-chips { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; background:#fff; }
-  .owner-chip {
-    display:inline-flex; align-items:center; gap:5px;
-    background:var(--paper2); border:1px solid var(--line);
-    border-radius:100px; padding:3px 10px; font-size:7pt; font-weight:700; color:var(--ink);
+  table.dt { width: 100%; border-collapse: collapse; }
+  table.dt tr:not(:last-child) td { border-bottom: 1px solid var(--line); }
+  td.l {
+    padding: 2.5mm 3mm; font-size: 8pt; color: var(--muted);
+    font-weight: 500; width: 45%; white-space: nowrap;
+    border-left: 1px solid var(--line);
   }
-  .oc-label { font-weight:700; }
-  .oc-val   { color:var(--muted); font-weight:500; }
-  .owner-chip .num {
-    width:15px; height:15px; border-radius:50%;
-    background:var(--brown); color:#fff;
-    display:inline-flex; align-items:center; justify-content:center;
-    font-size:6pt; font-weight:800; flex-shrink:0;
+  td.v {
+    padding: 2.5mm 3mm; font-size: 8.5pt; font-weight: 700;
+    color: var(--ink); text-align: left;
+  }
+  td.v-mono { font-family: 'IBM Plex Mono', monospace; font-size: 8pt; letter-spacing: .02em; }
+
+  /* ── Ownership chips ──────────────────────────── */
+  .ow-chips { display: flex; flex-wrap: wrap; gap: 3px; padding: 3mm; }
+  .ow-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--paper2); border: 1px solid var(--line);
+    border-radius: 100px; padding: 2px 9px;
+    font-size: 7.5pt; font-weight: 700; color: var(--ink);
+  }
+  .ow-num {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 6pt; font-weight: 800; flex-shrink: 0;
+  }
+  .ow-date { color: var(--muted); font-weight: 500; font-size: 7pt; }
+
+  /* ── Recalls ──────────────────────────────────── */
+  .no-recall {
+    padding: 4mm; color: var(--green); font-size: 9pt; font-weight: 700;
+    text-align: center; background: #f0fdf4;
+  }
+  .recall-item { padding: 3mm 4mm; border-bottom: 1px solid var(--line); }
+  .rc-type { font-size: 8pt; font-weight: 700; color: var(--red); margin-bottom: 1mm; }
+  .rc-desc { font-size: 7.5pt; color: var(--muted); line-height: 1.5; }
+
+  /* ── Price section ────────────────────────────── */
+  .pgrid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .pcell {
+    padding: 3mm 4mm; text-align: center;
+    border-left: 1px solid var(--line);
+  }
+  .pcell:last-child { border-left: none; }
+  .pcell-val { font-size: 13pt; font-weight: 900; color: var(--ink); }
+  .pcell-lbl { font-size: 7pt; color: var(--muted); font-weight: 600; margin-top: 1mm; letter-spacing: .04em; }
+  .pest { padding: 3mm 4mm; background: var(--soft); }
+  .pest-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .pest-lbl { font-size: 8pt; color: var(--muted); font-weight: 600; }
+  .pest-val { font-size: 12pt; font-weight: 900; color: var(--accent); }
+  .pest-sub { font-size: 7pt; color: var(--muted); margin-top: 1mm; }
+
+  /* ── TCO ──────────────────────────────────────── */
+  .tcgrid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .tcell {
+    padding: 3mm 2mm; text-align: center;
+    border-left: 1px solid var(--line);
+  }
+  .tcell:last-child { border-left: none; }
+  .tcell-val { font-size: 10pt; font-weight: 800; color: var(--ink); }
+  .tcell-lbl { font-size: 6.5pt; color: var(--muted); font-weight: 600; margin-top: 1mm; }
+  .ttot {
+    padding: 3mm 4mm; display: flex; justify-content: space-between;
+    background: var(--soft);
+  }
+  .ttot span    { font-size: 9pt; font-weight: 700; }
+  .ttot strong  { font-size: 13pt; font-weight: 900; color: var(--accent); }
+  .tsub { padding: 0 4mm 3mm; font-size: 7.5pt; color: var(--muted); background: var(--soft); }
+
+  /* ── Safety feature tags ───────────────────────── */
+  .ftags { display: flex; flex-wrap: wrap; gap: 4px; padding: 3mm; }
+  .ftag {
+    font-size: 7pt; font-weight: 700; color: var(--green);
+    background: #dcfce7; border: 1px solid #86efac;
+    border-radius: 100px; padding: 2px 8px;
   }
 
-  /* ── KM HERO ── */
-  .km-big { padding:7px 12px 4px; display:flex; align-items:baseline; gap:5px; border-bottom:1px solid var(--line); background:#fff; }
-  .km-n { font-size:18pt; font-weight:900; color:var(--gold); font-family:'IBM Plex Mono',monospace; }
-  .km-u { font-size:8pt; color:var(--muted); font-weight:600; }
-
-  .no-recall { padding:8px 12px; color:var(--green); font-size:7.5pt; font-weight:700; background:#fff; }
-  .recall-item { padding:6px 12px; border-bottom:1px solid var(--line); background:#fff; }
-  .rc-type { font-size:7pt; font-weight:700; color:var(--red); margin-bottom:2px; }
-  .rc-desc { font-size:6.5pt; color:var(--muted); line-height:1.4; }
-
-  /* ── FOOTER ── */
-  .doc-footer {
-    border-top:1.5px solid var(--line); padding-top:3mm;
-    display:flex; justify-content:space-between; align-items:center;
-    color:var(--muted); font-size:6.5pt;
+  /* ── Footer ──────────────────────────────────── */
+  .doc-f {
+    margin-top: 6mm; padding-top: 4mm;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 7.5pt; color: var(--muted);
+    page-break-inside: avoid; break-inside: avoid;
   }
-  .df-brand { font-weight:900; color:var(--brown-dark); font-size:7.5pt; }
+  .df-brand { font-weight: 900; color: var(--ink); font-size: 8.5pt; }
+  .df-url { font-family: 'IBM Plex Mono', monospace; font-size: 7pt; }
 </style>
 </head>
 <body>
@@ -2961,57 +3190,65 @@ function exportPDF() {
 <div class="doc">
 
   <!-- Header -->
-  <div class="doc-header">
-    <div class="dh-left">
-      <div class="org">מאגר הרכבים הלאומי — ישראל</div>
-      <div class="title">דוח בדיקת רכב</div>
-      <div class="sub">נתונים ממשרד התחבורה · data.gov.il</div>
+  <header class="doc-h">
+    <div class="dh-brand">
+      <div class="dh-mark">★ Veritas</div>
+      <div class="dh-sub">מאגר הרכבים הלאומי · נתונים ממשרד התחבורה</div>
     </div>
-    <div class="dh-right">
-      <div class="plate-badge">
-        <div class="plate-flag"><span>IL</span></div>
-        <div class="plate-num">${plate}</div>
-      </div>
+    <div class="dh-meta">
+      <strong>דוח בדיקת רכב</strong>
+      <span>${today}</span>
     </div>
-  </div>
+  </header>
 
-  <!-- Hero band -->
-  <div class="hero-band">
-    <div>
-      <div class="hb-make">${make}</div>
-      <div class="hb-model">${model}</div>
-      ${trim && trim !== '—' ? `<div class="hb-trim">${trim}</div>` : ''}
-      <div class="hb-stats">
-        <div><div class="stat-lbl">שנת ייצור</div><div class="stat-val">${year}</div></div>
-        <div><div class="stat-lbl">דלק</div><div class="stat-val">${fuel}</div></div>
-        <div><div class="stat-lbl">צבע</div><div class="stat-val">${carColor}</div></div>
-        <div><div class="stat-lbl">תוקף רישיון</div><div class="stat-val">${license}</div></div>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-photo">
+      ${carPhotoSrc
+        ? `<img src="${carPhotoSrc}" alt="${make} ${model}" crossorigin="anonymous">`
+        : `<div class="hero-photo-empty">🚗</div>`}
+    </div>
+    <div class="hero-info">
+      <div class="hero-make">${make}</div>
+      <div class="hero-model">${model}</div>
+      ${trim && trim !== '—' ? `<div class="hero-trim">${trim} · ${year}</div>` : `<div class="hero-trim">${year}</div>`}
+      <div class="hero-divider"></div>
+      <div class="hero-bottom">
+        <div class="h-plate">
+          <div class="h-plate-flag">IL</div>
+          <div class="h-plate-num">${plate}</div>
+        </div>
+        ${(healthNum && healthNum !== '—') ? `
+        <div class="h-score">
+          <div class="h-score-circle">${healthNum}</div>
+          <div class="h-score-text">
+            <span>ציון בריאות / 100</span>
+            <strong>${healthVerdict || ''}</strong>
+          </div>
+        </div>` : ''}
       </div>
     </div>
-    <div class="score-wrap">
-      <svg class="score-svg" viewBox="0 0 60 60">
-        <circle class="sc-track" cx="30" cy="30" r="24" transform="rotate(-90 30 30)"/>
-        <circle class="sc-fill" cx="30" cy="30" r="24" transform="rotate(-90 30 30)"
-          stroke="${scoreColor}"
-          stroke-dasharray="150.8"
-          stroke-dashoffset="${(150.8 - (score/100)*150.8).toFixed(1)}"/>
-      </svg>
-      <div class="score-center">
-        <div class="sc-num" style="color:#f2ede4">${healthNum}</div>
-      </div>
-      <div class="sc-verdict">${healthVerdict}</div>
-    </div>
-  </div>
+  </section>
 
-  <!-- Flags -->
   ${flagsHTML ? `<div class="flags">${flagsHTML}</div>` : ''}
 
-  <!-- 2-column grid -->
+  <!-- Quick stats -->
+  <section class="qstats">
+    <div class="qstat"><div class="qstat-lbl">דלק</div><div class="qstat-val">${fuel}</div></div>
+    <div class="qstat"><div class="qstat-lbl">צבע</div><div class="qstat-val">${carColor}</div></div>
+    <div class="qstat"><div class="qstat-lbl">תוקף רישיון</div><div class="qstat-val">${license}</div></div>
+    <div class="qstat"><div class="qstat-lbl">${avgKm ? 'נסועה ממוצעת לשנה' : 'אגרה משוערת'}</div><div class="qstat-val">${avgKm || fee || '—'}</div></div>
+  </section>
+
+  <!-- 2-column data grid -->
   <div class="sections">
 
     <!-- פרטי רכב -->
-    <div class="sec">
-      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="22" height="13" rx="2"/><path d="M5 6V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/><circle cx="8" cy="17" r="1.5" fill="currentColor"/><circle cx="16" cy="17" r="1.5" fill="currentColor"/></svg></span> פרטי הרכב</div>
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="22" height="13" rx="2"/><circle cx="8" cy="17" r="1.5" fill="currentColor"/><circle cx="16" cy="17" r="1.5" fill="currentColor"/></svg>
+        פרטי הרכב
+      </div>
       <table class="dt">
         <tr><td class="l">יצרן</td><td class="v">${g('dMake')}</td></tr>
         <tr><td class="l">דגם</td><td class="v">${g('dModel')}</td></tr>
@@ -3024,55 +3261,101 @@ function exportPDF() {
         <tr><td class="l">צמיג קדמי</td><td class="v">${g('dTireF')}</td></tr>
         <tr><td class="l">צמיג אחורי</td><td class="v">${g('dTireR')}</td></tr>
       </table>
-    </div>
+    </section>
 
     <!-- בעלות ורישום -->
-    <div class="sec">
-      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></span> בעלות ורישום</div>
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        בעלות ורישום
+      </div>
       <table class="dt">
-        <tr><td class="l">שילדה</td><td class="v" style="font-size:6.5pt">${g('dChassis')}</td></tr>
+        <tr><td class="l">סוג בעלות</td><td class="v">${g('dOwner')}</td></tr>
+        <tr><td class="l">שילדה</td><td class="v v-mono">${g('dChassis')}</td></tr>
         <tr><td class="l">עלייה לכביש</td><td class="v">${g('dFirstReg')}</td></tr>
         <tr><td class="l">צבע</td><td class="v">${g('dColor')}</td></tr>
         <tr><td class="l">שנת ייצור</td><td class="v">${g('dYear')}</td></tr>
         <tr><td class="l">טסט אחרון</td><td class="v">${g('dLastTest')}</td></tr>
         <tr><td class="l">תוקף רישיון</td><td class="v">${g('dLicense')}</td></tr>
       </table>
-      <div class="sec-head" style="font-size:6pt; border-top:1.5px solid var(--line); border-bottom:none; margin-top:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> היסטוריית בעלויות</div>
-      <div class="owner-chips">
-        ${[...document.querySelectorAll('#ownershipBody .data-row')].map((row,i)=>{
-          const spans = row.querySelectorAll('span');
-          // spans[0] may contain a number circle + text, strip all leading digits/spaces
-          const rawLabel = spans[0]?.textContent?.trim()||'';
-          const label = rawLabel.replace(/^\d+\s*/,'').replace(/\d/g,'').trim();
-          const val   = spans[1]?.textContent?.trim()||'';
-          return `<div class="owner-chip"><span class="num">${i+1}</span><span class="oc-label">${label}</span></div>`;
-        }).join('')}
+    </section>
+
+    ${ownerChipsHTML ? `
+    <!-- היסטוריית בעלויות -->
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        היסטוריית בעלויות
       </div>
-    </div>
+      <div class="ow-chips">${ownerChipsHTML}</div>
+    </section>` : ''}
 
     <!-- קילומטרז' -->
-    <div class="sec">
-      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> קילומטרז' ומידע היסטורי</div>
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        קילומטרז' ומידע היסטורי
+      </div>
       <table class="dt">
-        ${kmHero ? `<tr><td class="l">נסועה אחרונה</td><td class="v">${kmHero} ק"מ</td></tr>` : ''}
-        ${kmRows}
+        ${kmHero ? `<tr><td class="l">נסועה אחרונה</td><td class="v" style="color:var(--accent);font-size:11pt">${kmHero} ק"מ</td></tr>` : ''}
+        ${kmRowsHTML}
       </table>
-    </div>
+    </section>
 
     <!-- ריקולים -->
-    <div class="sec">
-      <div class="sec-head"><span class="sec-head-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> ריקולים פתוחים</div>
-      ${recallItems || '<div class="no-recall">&#10003; לא נמצאו ריקולים פתוחים לרכב זה</div>'}
-    </div>
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        ריקולים פתוחים
+      </div>
+      ${recallItems || '<div class="no-recall">✓ לא נמצאו ריקולים פתוחים לרכב זה</div>'}
+    </section>
+
+    ${envRowsHTML ? `
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-3.6 17.7-8.2 17.04Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg>
+        סביבה
+      </div>
+      <table class="dt">${envRowsHTML}</table>
+    </section>` : ''}
+
+    ${(safetyRowsHTML || safetyFeaturesHTML) ? `
+    <section class="sec">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        בטיחות
+      </div>
+      ${safetyRowsHTML ? `<table class="dt">${safetyRowsHTML}</table>` : ''}
+      ${safetyFeaturesHTML ? `<div class="ftags">${safetyFeaturesHTML}</div>` : ''}
+    </section>` : ''}
+
+    ${priceHTML ? `
+    <section class="sec sec-full">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        מחיר ויבואן
+      </div>
+      ${priceHTML}
+    </section>` : ''}
+
+    ${tcoHTML ? `
+    <section class="sec sec-full">
+      <div class="sec-head">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0v6a2.5 2.5 0 0 1-5 0"/><line x1="12" y1="6" x2="12" y2="18"/></svg>
+        עלות בעלות שנתית משוערת
+      </div>
+      ${tcoHTML}
+    </section>` : ''}
 
   </div>
 
   <!-- Footer -->
-  <div class="doc-footer">
-    <div class="df-brand">מאגר רכבים ישראל</div>
+  <footer class="doc-f">
+    <div class="df-brand">★ Veritas — מאגר רכבים ישראל</div>
     <div>נתונים ממשרד התחבורה ובטיחות בדרכים · data.gov.il</div>
-    <div>${today}</div>
-  </div>
+    <div class="df-url">${today}</div>
+  </footer>
 
 </div>
 </body>
@@ -3128,6 +3411,304 @@ function exportPDF() {
   `);
   doc.write(html);
   doc.close();
+}
+
+// ─── Visual share card (PNG) ──────────────────────────────────
+// Renders a 1080×1350 portrait card via Canvas with the car photo, plate,
+// stats and a small Veritas footer. Uses Web Share API (Level 2) when
+// available so users can pick WhatsApp / Instagram / etc; otherwise falls
+// back to a download.
+async function shareCard() {
+  const btn = event?.currentTarget;
+  const orig = btn?.innerHTML;
+  if (btn) { btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; btn.disabled = true; }
+
+  try {
+    const blob = await buildShareCard();
+    if (!blob) throw new Error('canvas tainted');
+
+    const file = new File([blob], `veritas-${Date.now()}.png`, { type: 'image/png' });
+    const plate = document.getElementById('plateTxt')?.textContent?.trim() || '';
+    const make  = document.getElementById('carMake')?.textContent?.trim() || '';
+    const model = document.getElementById('carModel')?.textContent?.trim() || '';
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: `${make} ${model} — ${plate}`,
+        text:  `דוח רכב מ-Veritas`,
+      });
+    } else {
+      // Download fallback
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = file.name;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('[shareCard] failed', e);
+  } finally {
+    if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+  }
+}
+
+// Returns a Promise<Blob|null>. Null when the canvas is tainted (cross-origin
+// image without CORS) — caller should fall back gracefully.
+//
+// Light "iOS-style" share card (1080×1350): cool gray background, white
+// rounded cards stacked vertically, strong typography, single accent color.
+async function buildShareCard() {
+  const W = 1080, H = 1350;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.direction = 'rtl';
+
+  // Light, premium palette — same family as the iOS-style Profile modal.
+  const C = {
+    bg:      '#f3f4f8',
+    surface: '#ffffff',
+    text:    '#0a0c10',
+    dim:     '#4b5563',
+    muted:   '#9ca3af',
+    border:  'rgba(0,0,0,0.06)',
+    accent:  '#c47f1a',
+  };
+
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+
+  // Pull data once
+  const plateRaw = document.getElementById('stolenRaw')?.value || '';
+  const snap = getHistory().find(x => x.plate === plateRaw)?.snapshot || {};
+  const make  = (snap.make  || document.getElementById('carMake')?.textContent  || '').trim();
+  const model = (snap.model || document.getElementById('carModel')?.textContent || '').trim();
+  const trim  = (snap.trim  || document.getElementById('carTrim')?.textContent  || '').trim();
+  const plateTxt = document.getElementById('plateTxt')?.textContent?.trim() || '';
+
+  // ── Top brand bar (minimal) ──
+  ctx.fillStyle = C.accent;
+  ctx.font = "900 32px 'Heebo', sans-serif";
+  ctx.textAlign = 'right';
+  ctx.fillText('★ Veritas', W - 60, 80);
+  ctx.fillStyle = C.muted;
+  ctx.font = "600 20px 'Heebo', sans-serif";
+  ctx.textAlign = 'left';
+  ctx.fillText('דוח רכב', 60, 80);
+
+  // ── Card 1: photo + identity + plate ──
+  const card1X = 50, card1Y = 130, card1W = W - 100, card1H = 800;
+  drawShadowCard(ctx, card1X, card1Y, card1W, card1H, 28, C.surface);
+
+  // Photo area (top of card1)
+  const photoX = card1X + 30, photoY = card1Y + 30, photoH = 420, photoW = card1W - 60;
+  drawRoundedRect(ctx, photoX, photoY, photoW, photoH, 22);
+  ctx.fillStyle = '#fafbfc'; ctx.fill();
+
+  const photoSrc = document.getElementById('carPhoto')?.src;
+  if (photoSrc) {
+    const img = await loadImageCors(photoSrc);
+    if (img) {
+      ctx.save();
+      drawRoundedRect(ctx, photoX, photoY, photoW, photoH, 22);
+      ctx.clip();
+      const ar = img.width / img.height;
+      const boxAr = photoW / photoH;
+      let dw, dh, dx, dy;
+      if (ar > boxAr) { dw = photoW * 0.94; dh = dw / ar; dx = photoX + (photoW - dw)/2; dy = photoY + (photoH - dh)/2; }
+      else            { dh = photoH * 0.94; dw = dh * ar; dx = photoX + (photoW - dw)/2; dy = photoY + (photoH - dh)/2; }
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    }
+  }
+
+  // Identity block under photo (each on its own line, right-aligned, no overlap)
+  let idY = photoY + photoH + 60;
+
+  // Make (small accent, prefer English when available)
+  ctx.textAlign = 'right';
+  ctx.fillStyle = C.accent;
+  ctx.font = "800 26px 'Heebo', sans-serif";
+  let makeLabel = make;
+  const enMatch = make.match(/[A-Za-z][A-Za-z\s\-]*[A-Za-z]/);
+  if (enMatch) makeLabel = enMatch[0].trim();
+  ctx.fillText(makeLabel.toUpperCase(), card1X + card1W - 40, idY);
+
+  // HUGE model name
+  idY += 72;
+  ctx.fillStyle = C.text;
+  ctx.font = "900 76px 'Heebo', sans-serif";
+  ctx.fillText(model, card1X + card1W - 40, idY);
+
+  // Subtitle: trim · year (dim)
+  const subParts = [];
+  if (trim && trim !== '—') subParts.push(trim);
+  if (snap.year)            subParts.push(String(snap.year));
+  if (subParts.length) {
+    idY += 36;
+    ctx.fillStyle = C.dim;
+    ctx.font = "600 24px 'Heebo', sans-serif";
+    ctx.fillText(subParts.join('  ·  '), card1X + card1W - 40, idY);
+  }
+
+  // Plate — own row at the bottom of card1, left-aligned, no chance of overlap
+  drawIlPlate(ctx, card1X + 40, card1Y + card1H - 100, plateTxt, 1.15);
+
+  // ── Card 2: stats grid ──
+  const stats = [];
+  if (snap.mileage)        stats.push({ label: 'נסועה',     num: Number(snap.mileage).toLocaleString('he-IL'), unit: 'ק"מ' });
+  if (snap.owners != null) stats.push({ label: 'בעלויות',  num: String(snap.owners), unit: 'ידיים' });
+  if (snap.health != null) {
+    const hn = Number(snap.health);
+    const hc = hn >= 75 ? '#16a34a' : hn >= 50 ? C.accent : '#dc2626';
+    // Use a single combined value for ratios: bidi treats "92/100" as one
+    // LTR run, so it renders as expected with no reordering quirks
+    stats.push({ label: 'ציון בריאות', value: `${hn}/100`, valueColor: hc });
+  }
+  if (snap.fuel)  stats.push({ label: 'סוג דלק', value: snap.fuel });
+
+  const card2X = 50, card2Y = card1Y + card1H + 24;
+  const tilesPerRow = 2;
+  const rows = Math.ceil(stats.length / tilesPerRow);
+  const tileH = 130;
+  const tileGap = 18;
+  const card2H = 50 + rows * tileH + (rows - 1) * tileGap;
+  const card2W = W - 100;
+  drawShadowCard(ctx, card2X, card2Y, card2W, card2H, 28, C.surface);
+
+  const tileW = (card2W - 40 - tileGap) / tilesPerRow;
+  stats.forEach((s, i) => {
+    const col = i % tilesPerRow, row = Math.floor(i / tilesPerRow);
+    // RTL placement: first tile on the right
+    const tx = card2X + 20 + (tilesPerRow - 1 - col) * (tileW + tileGap);
+    const ty = card2Y + 30 + row * (tileH + tileGap);
+
+    // Subtle pill background
+    drawRoundedRect(ctx, tx, ty, tileW, tileH, 18);
+    ctx.fillStyle = '#f7f8fb';
+    ctx.fill();
+
+    // Label (top-right of tile, dim)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = C.dim;
+    ctx.font = "600 20px 'Heebo', sans-serif";
+    ctx.fillText(s.label, tx + tileW - 22, ty + 38);
+
+    // Three rendering paths:
+    //   • value (single combined string) — for ratios like "92/100"
+    //   • num + unit — number on LEFT (large), unit on RIGHT (small dim)
+    //   • value-only fallback (e.g. fuel = "בנזין")
+    const valueColor = s.valueColor || C.text;
+    if (s.value !== undefined && s.num === undefined) {
+      ctx.fillStyle = valueColor;
+      ctx.font = "900 38px 'Heebo', sans-serif";
+      ctx.textAlign = 'right';
+      ctx.fillText(s.value, tx + tileW - 22, ty + 90);
+    } else if (s.num) {
+      ctx.fillStyle = C.dim;
+      ctx.font = "700 22px 'Heebo', sans-serif";
+      const unitW = ctx.measureText(s.unit).width;
+      ctx.textAlign = 'right';
+      ctx.fillText(s.unit, tx + tileW - 22, ty + 90);
+      ctx.fillStyle = valueColor;
+      ctx.font = "900 42px 'Heebo', sans-serif";
+      ctx.fillText(s.num, tx + tileW - 22 - unitW - 8, ty + 90);
+    }
+  });
+
+  try {
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob null')), 'image/png');
+    });
+  } catch (e) {
+    console.warn('[shareCard] canvas tainted by cross-origin image', e);
+    return null;
+  }
+}
+
+// Helper: draw a rounded white card with a soft shadow.
+function drawShadowCard(ctx, x, y, w, h, r, fill) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.07)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 6;
+  drawRoundedRect(ctx, x, y, w, h, r);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+
+function drawIlPlate(ctx, x, y, plateText, scale = 1) {
+  if (!plateText) return;
+  const h = 64 * scale;
+  const fontSize = 36 * scale;
+  const flagW = 50 * scale;
+  const padR = 22 * scale;
+  const radius = 12 * scale;
+
+  ctx.save();
+  ctx.direction = 'ltr';
+  ctx.font = `800 ${fontSize}px 'IBM Plex Mono', monospace`;
+  const numW = ctx.measureText(plateText).width;
+  const w = flagW + padR + numW + 26 * scale;
+
+  // Drop shadow on the yellow body
+  ctx.shadowColor = 'rgba(0,0,0,0.25)';
+  ctx.shadowBlur = 14 * scale;
+  ctx.shadowOffsetY = 3 * scale;
+  drawRoundedRect(ctx, x, y, w, h, radius);
+  ctx.fillStyle = '#f5b800'; ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = 3 * scale; ctx.strokeStyle = '#000'; ctx.stroke();
+
+  // Blue IL flag tile — clip to the SAME rounded shape as the yellow plate so
+  // the blue doesn't poke out past the rounded corners
+  ctx.save();
+  drawRoundedRect(ctx, x, y, w, h, radius);
+  ctx.clip();
+  ctx.fillStyle = '#003d8e';
+  ctx.fillRect(x, y, flagW, h);
+  ctx.fillStyle = '#fff';
+  ctx.font = `800 ${22 * scale}px 'Heebo', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('IL', x + flagW/2, y + h/2 + 8 * scale);
+  ctx.restore();
+
+  // Plate digits
+  ctx.fillStyle = '#000';
+  ctx.font = `800 ${fontSize}px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'left';
+  ctx.fillText(plateText, x + flagW + padR, y + h/2 + 12 * scale);
+  ctx.restore();
+}
+
+// Try to load an image with CORS so we can draw it without tainting the
+// canvas. If the server doesn't send Access-Control-Allow-Origin we still
+// try a non-CORS load (image will display but canvas export will fail).
+function loadImageCors(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => resolve(img);
+    img.onerror = () => {
+      // Retry without CORS — at least we tried
+      const img2 = new Image();
+      img2.onload  = () => resolve(img2);
+      img2.onerror = () => resolve(null);
+      img2.src = src;
+    };
+    img.src = src;
+  });
 }
 
 // ─── WhatsApp Share ───────────────────────────────────────────
