@@ -2147,18 +2147,28 @@ async function loadCarPhoto(engBrand, modelHeb, kinuyEn, year, colorHeb) {
     if (!res.ok) { _carPhotoCache.set(key, null); return; }
     let url = data?.urls?.[0];
 
-    // If color-specific lookup returned nothing, retry without color
-    if (!url && color) {
-      console.log('[carimages] no color match, retrying without color');
-      const retryPayload = { ...payload }; delete retryPayload.color;
-      const r2 = await fetch(`${CARIMAGES_URL}?api_key=${encodeURIComponent(CARIMAGES_API_KEY)}`, {
+    // Progressive fallback: drop color first, then drop year (any year of the
+    // model), then drop model entirely (any car of the brand). Each rung
+    // trades specificity for a higher chance of getting *some* image.
+    const tryAgain = async (pl, why) => {
+      console.log('[carimages]', why);
+      const r = await fetch(`${CARIMAGES_URL}?api_key=${encodeURIComponent(CARIMAGES_API_KEY)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: [retryPayload] }),
+        body: JSON.stringify({ images: [pl] }),
       });
-      const d2 = await r2.json().catch(() => ({}));
-      console.log('[carimages] retry response', r2.status, d2);
-      url = d2?.urls?.[0];
+      const d = await r.json().catch(() => ({}));
+      console.log('[carimages] →', r.status, d);
+      return d?.urls?.[0] || null;
+    };
+
+    if (!url && color) {
+      const p = { ...payload }; delete p.color;
+      url = await tryAgain(p, 'no color match, retrying without color');
+    }
+    if (!url) {
+      const p = { make: engBrand, width: '900', format: 'webp' };
+      url = await tryAgain(p, 'retrying with make only (any model)');
     }
 
     _carPhotoCache.set(key, url || null);
@@ -2182,25 +2192,44 @@ function showCarPhoto(url, alt) {
 }
 
 // ─── Brand logo ───────────────────────────────────────────────
-const BRAND_MAP = {
-  hyundai:'hyundai', toyota:'toyota', kia:'kia', honda:'honda',
+// Primary source: carimagesapi.com /brand-logo (no auth, broad coverage,
+// fuzzy brand matching). Fallback: jsDelivr's car-logos-dataset for the
+// rare cases the primary 404s (e.g. Cupra at the time of writing).
+const LOGO_FALLBACK = {
+  cupra:'cupra', hyundai:'hyundai', toyota:'toyota', kia:'kia', honda:'honda',
   mazda:'mazda', nissan:'nissan', mitsubishi:'mitsubishi',
   volkswagen:'volkswagen', skoda:'skoda', seat:'seat', audi:'audi',
   bmw:'bmw', mercedes:'mercedes-benz', ford:'ford', opel:'opel',
   peugeot:'peugeot', renault:'renault', citroen:'citroen', fiat:'fiat',
   subaru:'subaru', suzuki:'suzuki', tesla:'tesla', volvo:'volvo',
   jeep:'jeep', dodge:'dodge', chevrolet:'chevrolet', lexus:'lexus',
-  chrysler:'jeep', 'grand cherokee':'jeep', 'grand_cherokee':'jeep',
-  infiniti:'infiniti', dacia:'dacia', seat:'seat', cupra:'cupra',
+  chrysler:'jeep', infiniti:'infiniti', dacia:'dacia',
 };
 function loadBrandLogo(kinuyEn, tozetNm, engBrand) {
   const logo = document.getElementById('brandLogo');
+  if (!logo) return;
   logo.style.display = 'none';
-  const search = [kinuyEn, tozetNm, engBrand].filter(Boolean).join(' ').toLowerCase();
-  const key = Object.keys(BRAND_MAP).find(k => search.includes(k));
-  if (!key) return;
-  logo.src = `https://cdn.jsdelivr.net/gh/filippofilip95/car-logos-dataset/logos/thumb/${BRAND_MAP[key]}.png`;
-  logo.onload = () => { logo.style.display = 'block'; };
+
+  // Prefer the cleaned engBrand (extracted upstream). Fall back to scanning
+  // all available strings for a known brand keyword.
+  let brand = (engBrand || '').trim();
+  if (!brand) {
+    const search = [kinuyEn, tozetNm].filter(Boolean).join(' ').toLowerCase();
+    const key = Object.keys(LOGO_FALLBACK).find(k => search.includes(k));
+    brand = key ? key.replace(/^\w/, c => c.toUpperCase()) : '';
+  }
+  if (!brand) return;
+
+  const primary  = `https://carimagesapi.com/brand-logo?make=${encodeURIComponent(brand)}`;
+  const fbKey    = LOGO_FALLBACK[brand.toLowerCase()];
+  const fallback = fbKey ? `https://cdn.jsdelivr.net/gh/filippofilip95/car-logos-dataset/logos/thumb/${fbKey}.png` : null;
+
+  logo.onload  = () => { logo.style.display = 'block'; };
+  logo.onerror = () => {
+    if (fallback && logo.src !== fallback) { logo.src = fallback; }
+    else                                   { logo.style.display = 'none'; }
+  };
+  logo.src = primary;
 }
 
 // ─── Health Score ─────────────────────────────────────────────
